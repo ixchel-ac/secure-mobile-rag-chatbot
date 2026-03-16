@@ -1,3 +1,6 @@
+//Entrypoint tell android which screen to show fist
+
+
 package com.example.baselinechatbot
 
 import android.os.Bundle
@@ -7,6 +10,9 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import com.example.baselinechatbot.ui.theme.BaselineChatbotTheme
+import androidx.compose.ui.graphics.Color
+
+// Creates the main android screen container and is base class for activities
 
 
 class MainActivity : ComponentActivity() {
@@ -16,7 +22,8 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             BaselineChatbotTheme {
-                Surface(color = MaterialTheme.colorScheme.background) {
+                Surface(color = Color(0xFFF5F7FB)) {
+                    //tells Android to display the composable function called ChatScreen
                     ChatScreen()
                 }
             }
