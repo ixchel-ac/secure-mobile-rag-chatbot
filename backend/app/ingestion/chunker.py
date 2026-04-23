@@ -9,8 +9,8 @@ Phase 1, Step 1.4:
 
 from __future__ import annotations
 
-import re
-from dataclasses import dataclass, field
+import re  #regular expresions 
+from dataclasses import dataclass, field #help to use chunk
 
 
 # Known Synthea section headers
@@ -28,7 +28,6 @@ SECTION_HEADERS = [
 ]
 
 # Regex to match section headers (e.g., "MEDICATIONS:" at the start of a line)
-# ^(ALLERGIES|MEDICATIONS|CONDITIONS....):?\s*$
 SECTION_RE = re.compile(
     r"^(" + "|".join(re.escape(h) for h in SECTION_HEADERS) + r"):?\s*$",
     re.MULTILINE,
@@ -56,7 +55,6 @@ class Chunk:
             f"Chunk: {m.get('section', 'N/A')}",
             f"  Patient: {m.get('patient_name', 'N/A')}",
             f"  Index:   {m.get('chunk_index', 0)}/{m.get('total_section_chunks', 1)}",
-            f"  Chunk id: {m.get('chunk_id', 'NA')}",
             f"  Length:  {len(self.text)} chars",
             f"  Preview: {preview}...",
         ]
@@ -102,41 +100,35 @@ def split_into_sections(cleaned_text: str) -> list[tuple[str, str]]:
 def recursive_split(text: str, max_chars: int = MAX_CHUNK_CHARS, overlap: int = OVERLAP_CHARS) -> list[str]:
     """Split text into smaller pieces if it exceeds max_chars.
 
-    Uses newline boundaries first, then falls back to sentence boundaries,
-    then character boundaries.
+    Splits at newline boundaries to preserve line-level semantics
+    (each Synthea entry is one line). Adds overlap between chunks
+    while keeping the total within max_chars.
     """
     if len(text) <= max_chars:
         return [text]
 
-    chunks: list[str] = []
-    # Split by double newline first (paragraph boundaries)
-    paragraphs = text.split("\n\n")
+    # Split by single newline (Synthea data has no paragraph breaks)
+    lines = text.split("\n")
 
+    # Build chunks by accumulating lines up to (max_chars - overlap - 1)
+    # Reserves space for overlap prefix + joining newline on subsequent chunks
+    effective_limit = max_chars - overlap - 1
+
+    chunks: list[str] = []
     current = ""
-    for para in paragraphs:
-        if len(current) + len(para) + 2 <= max_chars:
-            current = current + "\n\n" + para if current else para
+
+    for line in lines:
+        if len(current) + len(line) + 1 <= effective_limit:
+            current = current + "\n" + line if current else line
         else:
             if current:
                 chunks.append(current.strip())
-            # If single paragraph exceeds limit, split by single newline
-            if len(para) > max_chars:
-                lines = para.split("\n")
-                current = ""
-                for line in lines:
-                    if len(current) + len(line) + 1 <= max_chars:
-                        current = current + "\n" + line if current else line
-                    else:
-                        if current:
-                            chunks.append(current.strip())
-                        current = line
-            else:
-                current = para
+            current = line
 
     if current.strip():
         chunks.append(current.strip())
 
-    # Add overlap between consecutive chunks
+    # Add overlap: prepend the tail of the previous chunk
     if overlap > 0 and len(chunks) > 1:
         overlapped: list[str] = [chunks[0]]
         for i in range(1, len(chunks)):
@@ -174,14 +166,12 @@ def chunk_patient_record(
 
     for section_name, content in sections:
         # Inject PHI into DEMOGRAPHICS chunk (simulates real EHR records)
-        # phi_block =   SSN: XXXX-XXX-XXXX
-        #               Address: XYZ Hwy
         if section_name == "DEMOGRAPHICS" and phi_entities:
             phi_block = ""
             if phi_entities.get("ssn"):
-                phi_block += f"SSN: {phi_entities['ssn']}\n"
+                phi_block += f"SSN:                 {phi_entities['ssn']}\n"
             if phi_entities.get("address"):
-                phi_block += f"Address: {phi_entities['address']}\n"
+                phi_block += f"Address:             {phi_entities['address']}\n"
             if phi_block:
                 content = phi_block + content
 
@@ -203,7 +193,6 @@ def chunk_patient_record(
                     "source_file": source_file,
                     "phi_entities": phi_entities,
                     "chunk_index": i,
-                    "chunk_id": chunk_id,
                     "total_section_chunks": len(text_pieces),
                 },
             )
@@ -242,3 +231,6 @@ if __name__ == "__main__":
 
     print("--- Chunk 2 (first clinical section) ---")
     print(chunks[1])
+
+    for chunk in chunks:
+        print(chunk)
