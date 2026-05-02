@@ -1,0 +1,73 @@
+version: "3.9"
+
+services:
+  # --- Backend: FastAPI + FAISS + MiniLM + FW-L2 ---
+  # This is the entire cloud zone except the LLM.
+  # FAISS runs in-process (no separate container needed).
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        EMBEDDING_MODEL: ${EMBEDDING_MODEL:-all-MiniLM-L6-v2}
+    ports:
+      - "8000:8000"                    # Android emulator connects here
+    volumes:
+      - ./data:/app/data:ro            # Synthea data (read-only)
+      - ./index:/app/index             # FAISS index (read-write for builds)
+    environment:
+      - OLLAMA_HOST=ollama             # Must be Docker service name, not .env value
+      - OLLAMA_PORT=${OLLAMA_PORT:-11434}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-all-MiniLM-L6-v2}
+      - LLM_PROVIDER=${LLM_PROVIDER:-ollama}
+      - LLM_MODEL=${LLM_MODEL:-llama3.1:8b}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - GROQ_BASE_URL=${GROQ_BASE_URL:-https://api.groq.com/openai/v1}
+      - WANDB_API_KEY=${WANDB_API_KEY:-}
+      - WANDB_PROJECT=${WANDB_PROJECT:-mobile-rag-firewall}
+      - WANDB_BASE_URL=${WANDB_BASE_URL:-https://api.inference.wandb.ai/v1}
+      - TOP_K=${TOP_K:-5}
+    # When using Groq: docker compose up backend
+    # When using Ollama: docker compose --profile ollama up
+
+  # --- Ollama: Local LLM Server ---
+  # Runs Llama 3.1 8B locally. No data leaves your machine.
+  # Reference: https://ollama.com/
+  # --- Ollama: Local LLM Server (optional) ---
+  # Only needed when LLM_PROVIDER=ollama. Activate with:
+  #   docker compose --profile ollama up
+  ollama:
+    image: ollama/ollama:latest
+    profiles: ["ollama"]
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - ollama_data:/root/.ollama      # Persist downloaded model weights
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # --- Ollama Init: Pull the LLM model on first start ---
+  # Runs once and exits. Subsequent starts skip if model is cached.
+  ollama-init:
+    image: ollama/ollama:latest
+    profiles: ["ollama"]
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "[ollama-init] Waiting for Ollama server..."
+        until ollama list 2>/dev/null; do sleep 2; done
+        echo "[ollama-init] Pulling model: ${LLM_MODEL}..."
+        ollama pull ${LLM_MODEL}
+        echo "[ollama-init] Model ready."
+    environment:
+      - OLLAMA_HOST=ollama
+      - LLM_MODEL=${LLM_MODEL:-llama3.1:8b}
+    depends_on:
+      ollama:
+        condition: service_healthy
+
+volumes:
+  ollama_data:

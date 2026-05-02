@@ -1,6 +1,7 @@
 """POST /query -- main RAG endpoint."""
 
-from fastapi import APIRouter
+import httpx
+from fastapi import APIRouter, HTTPException, Request
 
 from app.models.schemas import QueryRequest, QueryResponse
 
@@ -8,21 +9,34 @@ router = APIRouter()
 
 
 @router.post("/query", response_model=QueryResponse)
-async def handle_query(request: QueryRequest):
-    """Steps 4-7 from the architecture data flow."""
-    # Step 4: Embed query + retrieve from FAISS
-    # retrieved = await rag.retrieve(request.query, request.top_k)
+async def handle_query(body: QueryRequest, request: Request):
+    """Run the full RAG pipeline: retrieve -> generate -> FW-L2 validate."""
+    pipeline = getattr(request.app.state, "pipeline", None)
+    if pipeline is None:
+        raise HTTPException(
+            status_code=503,
+            detail="RAG pipeline not initialized. FAISS index may not be built yet. Call POST /ingest first.",
+        )
 
-    # Step 5: Generate response with Llama
-    # raw_response = await rag.generate(request.query, retrieved)
+    try:
+        result = await pipeline.query_async(query=body.query, top_k=body.top_k)
+    except (httpx.ConnectError, httpx.RemoteProtocolError) as e:
+        raise HTTPException(status_code=502, detail=f"LLM provider unreachable: {e}")
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="LLM request timed out")
 
-    # Step 6: FW-L2 -- validate + anonymize PHI
-    # validated = fw_l2.validate(raw_response, retrieved)
+    # Map RAGResponse -> QueryResponse
+    redacted_entities = []
+    if result.fw_l2_result and result.fw_l2_result.detections:
+        redacted_entities = [d.entity_type for d in result.fw_l2_result.detections]
 
-    # Step 7: Return anonymized response
+    sources = list({c.metadata.get("source_file", "") for c in result.chunks})
+
+    fw_l2_passed = not result.was_redacted and not result.injection_detected
+
     return QueryResponse(
-        response="TODO: implement RAG pipeline",
-        redacted_entities=[],
-        sources=[],
-        fw_l2_passed=True,
+        response=result.answer,
+        redacted_entities=redacted_entities,
+        sources=sources,
+        fw_l2_passed=fw_l2_passed,
     )
