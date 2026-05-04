@@ -11,18 +11,11 @@ from app.config import DATA_DIR, INDEX_DIR, EMBEDDING_MODEL, LLM_MODEL, LLM_PROV
 def _resolve_paths():
     """Resolve data and index paths.
 
-    Uses DATA_DIR and INDEX_DIR from config. If DATA_DIR is relative,
-    resolves it from the project root (backend's parent directory).
+    Uses DATA_DIR and INDEX_DIR from config. Relative paths are resolved
+    from the current working directory (expected: backend/).
     """
-    project_root = Path(__file__).parent.parent.parent
-
-    data_dir = Path(DATA_DIR)
-    if not data_dir.is_absolute():
-        data_dir = project_root / data_dir
-
-    index_dir = Path(INDEX_DIR)
-    if not index_dir.is_absolute():
-        index_dir = project_root / index_dir
+    data_dir = Path(DATA_DIR).resolve()
+    index_dir = Path(INDEX_DIR).resolve()
 
     text_dir = data_dir / "synthea" / "text"
     csv_dir = data_dir / "synthea" / "csv"
@@ -409,8 +402,13 @@ def evaluate():
 def leaderboard():
     """Run evaluations for multiple profiles and publish a W&B leaderboard.
 
-    Runs baseline and fw_l2 evaluations, then publishes a comparison
-    leaderboard on the W&B dashboard.
+    Supports two modes:
+    - local: runs the RAG pipeline locally (requires FAISS index + LLM)
+    - remote: calls the deployed /test endpoint on Cloud Run
+
+    Examples:
+        uv run leaderboard --mode local --profiles naive hardened_fw_l2_base
+        uv run leaderboard --mode remote --remote-url https://mobile-rag-firewall-938910481811.us-west2.run.app
     """
     import argparse
     import asyncio
@@ -418,7 +416,13 @@ def leaderboard():
     from app.config import WANDB_PROJECT
     from app.evaluation.leaderboard import run_and_publish
 
+    CLOUD_RUN_URL = "https://mobile-rag-firewall-938910481811.us-west2.run.app"
+
     parser = argparse.ArgumentParser(description="Run leaderboard evaluation")
+    parser.add_argument("--mode", choices=["local", "remote"], default="local",
+                        help="Run locally or against a remote /test endpoint (default: local)")
+    parser.add_argument("--remote-url", default=CLOUD_RUN_URL,
+                        help=f"Base URL for remote mode (default: {CLOUD_RUN_URL})")
     parser.add_argument("--profiles", nargs="+",
                         default=["naive", "naive_fw_l2_base", "hardened", "hardened_fw_l2_base"],
                         help="Profiles to compare (default: naive naive_fw_l2_base hardened hardened_fw_l2_base)")
@@ -439,12 +443,15 @@ def leaderboard():
     if not groundtruth_path.exists():
         print(f"Error: PHI ground truth not found. Run 'uv run ingestion' first.")
         sys.exit(1)
-    if not (index_dir / "faiss.index").exists():
-        print(f"Error: No FAISS index found. Run 'uv run ingestion' first.")
-        sys.exit(1)
+
+    if args.mode == "local":
+        if not (index_dir / "faiss.index").exists():
+            print(f"Error: No FAISS index found. Run 'uv run ingestion' first.")
+            sys.exit(1)
 
     weave.init(WANDB_PROJECT)
     print(f"[leaderboard] W&B project: {WANDB_PROJECT}")
+    print(f"[leaderboard] Mode: {args.mode}")
     print(f"[leaderboard] Profiles: {args.profiles}")
 
     asyncio.run(run_and_publish(
@@ -453,6 +460,8 @@ def leaderboard():
         groundtruth_path=str(groundtruth_path),
         profiles=args.profiles,
         limit=args.limit,
+        mode=args.mode,
+        remote_url=args.remote_url,
     ))
 
 

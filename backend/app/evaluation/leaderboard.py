@@ -151,21 +151,28 @@ async def run_and_publish(
     groundtruth_path: str,
     profiles: list[str],
     limit: int | None = None,
+    mode: str = "local",
+    remote_url: str | None = None,
 ) -> str:
     """Run evaluations for each profile and publish a leaderboard.
 
     Args:
-        index_dir: Path to FAISS index.
+        index_dir: Path to FAISS index (used in local mode).
         queries_path: Path to golden set JSON.
         groundtruth_path: Path to PHI ground truth JSON.
         profiles: List of profiles to evaluate (e.g., ["baseline", "fw_l2"]).
         limit: Max queries per profile.
+        mode: "local" to run pipeline locally, "remote" to call /test endpoint.
+        remote_url: Base URL for remote mode (e.g., "https://...run.app").
 
     Returns:
         Leaderboard ref URI.
     """
-    from app.evaluation.weave_eval import run_weave_evaluation
+    from app.evaluation.weave_eval import run_weave_evaluation, run_weave_evaluation_remote
 
+    print(f"[leaderboard] Mode: {mode}")
+    if mode == "remote":
+        print(f"[leaderboard] Remote URL: {remote_url}")
     print(f"[leaderboard] Running evaluations for profiles: {profiles}")
     print(f"[leaderboard] Queries: {queries_path}")
     if limit:
@@ -175,16 +182,25 @@ async def run_and_publish(
 
     for profile in profiles:
         print(f"\n{'=' * 50}")
-        print(f"  Running evaluation: {profile}")
+        print(f"  Running evaluation: {profile} ({mode})")
         print(f"{'=' * 50}")
 
-        results, evaluation = await run_weave_evaluation(
-            profile=profile,
-            index_dir=index_dir,
-            queries_path=queries_path,
-            groundtruth_path=groundtruth_path,
-            limit=limit,
-        )
+        if mode == "remote":
+            results, evaluation = await run_weave_evaluation_remote(
+                profile=profile,
+                remote_url=remote_url,
+                queries_path=queries_path,
+                groundtruth_path=groundtruth_path,
+                limit=limit,
+            )
+        else:
+            results, evaluation = await run_weave_evaluation(
+                profile=profile,
+                index_dir=index_dir,
+                queries_path=queries_path,
+                groundtruth_path=groundtruth_path,
+                limit=limit,
+            )
 
         evaluations[profile] = evaluation
 

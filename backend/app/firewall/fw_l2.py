@@ -332,21 +332,23 @@ class BERTNERClassifier:
     for medical text and Synthea-specific name patterns.
 
     Model loading priority:
-        1. Local path (backend/app/firewall/ner_model/) if exists
-        2. Pull from Weave (phi-ner-model:latest) if available
-        3. Fail with error
+        1. Local cached model if version matches W&B latest
+        2. Pull from W&B (phi-ner-model:latest artifact) if new version available
+        3. Explicit local path if provided
+        4. Fail with error
     """
 
-    WEAVE_MODEL_NAME = "phi-ner-model"
+    WANDB_ARTIFACT_NAME = "phi-ner-model"
+    WANDB_PROJECT = "mobile-rag-firewall"
+    _VERSION_FILE = ".artifact_version"
 
     def __init__(self, model_path: str | None = None):
         """Load the fine-tuned NER model.
 
         Args:
             model_path: Path to local model directory. If None or not found,
-                        attempts to pull from Weave.
+                        attempts to pull from W&B.
         """
-        from pathlib import Path
         from transformers import pipeline as hf_pipeline
 
         resolved_path = self._resolve_model_path(model_path)
@@ -361,54 +363,72 @@ class BERTNERClassifier:
         print(f"[fw_l2] BERT NER model loaded")
 
     def _resolve_model_path(self, model_path: str | None) -> str:
-        """Resolve model path: local first, then Weave."""
+        """Resolve model path: check for updates, use cache, or download."""
         from pathlib import Path
 
-        # Try local path
+        # Try explicit local path first (user override)
         if model_path:
             local = Path(model_path)
             if local.exists() and (local / "config.json").exists():
                 print(f"[fw_l2] Using local model: {local}")
                 return str(local)
 
-        # Try default local path
-        default_local = Path(__file__).parent / "ner_model"
-        if default_local.exists() and (default_local / "config.json").exists():
-            print(f"[fw_l2] Using local model: {default_local}")
-            return str(default_local)
+        cache_dir = Path(__file__).parent / "ner_model"
 
-        # Try pulling from Weave
+        # Check W&B for latest version and compare with cached
         try:
-            return self._pull_from_weave()
+            latest_version = self._get_latest_version()
+            cached_version = self._get_cached_version(cache_dir)
+
+            if cached_version and cached_version == latest_version:
+                print(f"[fw_l2] Cached model is up to date (version: {cached_version})")
+                return str(cache_dir)
+
+            if cached_version:
+                print(f"[fw_l2] New model available: {cached_version} -> {latest_version}")
+            return self._pull_from_wandb(cache_dir, latest_version)
         except Exception as e:
+            # If W&B check fails but we have a cached model, use it
+            if cache_dir.exists() and (cache_dir / "config.json").exists():
+                print(f"[fw_l2] Could not check W&B ({e}), using cached model")
+                return str(cache_dir)
             raise RuntimeError(
-                f"BERT NER model not found locally ({default_local}) "
-                f"and could not pull from Weave: {e}\n"
+                f"BERT NER model not found locally ({cache_dir}) "
+                f"and could not pull from W&B: {e}\n"
                 f"Either export locally: cd experiments/phi_ner && uv run ner-export --model distilbert\n"
-                f"Or publish to Weave from Colab notebook."
+                f"Or publish to W&B from Colab notebook."
             )
 
-    def _pull_from_weave(self) -> str:
-        """Pull model from Weave and cache locally."""
-        from pathlib import Path
-        import weave
+    def _get_latest_version(self) -> str:
+        """Query W&B for the latest artifact version digest."""
+        import wandb
 
-        print(f"[fw_l2] Pulling model from Weave: {self.WEAVE_MODEL_NAME}:latest")
-        model_artifact = weave.ref(f"{self.WEAVE_MODEL_NAME}:latest").get()
+        api = wandb.Api()
+        artifact = api.artifact(f"{self.WANDB_ARTIFACT_NAME}:latest", type="model")
+        return artifact.version
 
-        # Cache to local directory
-        cache_dir = Path(__file__).parent / "ner_model"
+    def _get_cached_version(self, cache_dir) -> str | None:
+        """Read the cached artifact version, if any."""
+        version_file = cache_dir / self._VERSION_FILE
+        if version_file.exists():
+            return version_file.read_text().strip()
+        return None
+
+    def _pull_from_wandb(self, cache_dir, version: str) -> str:
+        """Pull model artifact from W&B and cache locally."""
+        import wandb
+
+        print(f"[fw_l2] Downloading model artifact {self.WANDB_ARTIFACT_NAME}:latest")
+        run = wandb.init(project=self.WANDB_PROJECT, job_type="pull-model")
+        artifact = run.use_artifact(f"{self.WANDB_ARTIFACT_NAME}:latest")
         cache_dir.mkdir(parents=True, exist_ok=True)
+        artifact.download(root=str(cache_dir))
+        run.finish()
 
-        # model_artifact is a dict with file contents
-        for filename, content in model_artifact.items():
-            filepath = cache_dir / filename
-            if isinstance(content, bytes):
-                filepath.write_bytes(content)
-            else:
-                filepath.write_text(str(content))
+        # Save version for future cache checks
+        (cache_dir / self._VERSION_FILE).write_text(version)
 
-        print(f"[fw_l2] Cached model to {cache_dir}")
+        print(f"[fw_l2] Cached model to {cache_dir} (version: {version})")
         return str(cache_dir)
 
     # Punctuation to strip from entity boundaries
@@ -421,7 +441,7 @@ class BERTNERClassifier:
         in entity spans (e.g., "adah626 klein929 (" or ") lives").
         """
         # Trim leading punctuation and whitespace
-        while start < end and text[start] in self._BOUNDARY_PUNCT or text[start].isspace():
+        while start < end and (text[start] in self._BOUNDARY_PUNCT or text[start].isspace()):
             start += 1
 
         # Trim trailing punctuation and whitespace

@@ -140,6 +140,80 @@ class RAGModel(weave.Model):
         return result
 
 
+class RemoteRAGModel(weave.Model):
+    """Calls a remote /test endpoint instead of running the pipeline locally.
+
+    Used for leaderboard evaluation against a deployed Cloud Run service.
+    """
+
+    profile: str = "baseline"
+    remote_url: str = ""
+    groundtruth_path: str = ""
+
+    _groundtruth: dict | None = None
+
+    def load(self) -> None:
+        """Pre-load ground truth for PHI leak checking."""
+        if self.groundtruth_path:
+            with open(self.groundtruth_path, "r") as f:
+                self._groundtruth = json.load(f)
+
+    @weave.op
+    def predict(self, query: str) -> dict:
+        """Call the remote /test endpoint."""
+        import httpx
+
+        start = time.time()
+        response = httpx.post(
+            f"{self.remote_url}/test",
+            json={"query": query, "profile": self.profile, "top_k": 5},
+            timeout=120.0,
+        )
+        latency = time.time() - start
+
+        if response.status_code != 200:
+            return {
+                "answer": f"ERROR {response.status_code}: {response.text[:200]}",
+                "raw_answer": "",
+                "latency_seconds": latency,
+                "model": "remote",
+                "sections": [],
+                "was_redacted": False,
+                "injection_detected": False,
+                "phi_leaks": {},
+                "ssn_pattern_found": False,
+                "metadata_leaked": False,
+                "metadata_leak_patterns": [],
+            }
+
+        data = response.json()
+
+        result = {
+            "answer": data["response"],
+            "raw_answer": data["raw_response"],
+            "latency_seconds": latency,
+            "model": data.get("model", "remote"),
+            "sections": data.get("sections_retrieved", []),
+            "was_redacted": data.get("was_redacted", False),
+            "injection_detected": data.get("injection_detected", False),
+        }
+
+        # Check for PHI leaks against ground truth
+        if self._groundtruth:
+            result["phi_leaks"] = _find_phi_leaks(data["response"], self._groundtruth)
+            result["ssn_pattern_found"] = bool(SSN_PATTERN.search(data["response"]))
+            if data["raw_response"] != data["response"]:
+                result["raw_phi_leaks"] = _find_phi_leaks(data["raw_response"], self._groundtruth)
+                result["raw_ssn_pattern_found"] = bool(SSN_PATTERN.search(data["raw_response"]))
+
+        # Check for metadata leakage
+        metadata_leaks = _find_metadata_leaks(data["response"])
+        result["metadata_leaked"] = len(metadata_leaks) > 0
+        result["metadata_leak_patterns"] = metadata_leaks
+
+        return result
+
+
 # ── Scorers ──────────────────────────────────────────────────────────
 
 
@@ -344,6 +418,46 @@ async def run_weave_evaluation(
         dataset=dataset,
         scorers=scorers,
         metadata={"profile": profile, "total_queries": len(rows)},
+    )
+
+    results = await evaluation.evaluate(model)
+    return results, evaluation
+
+
+async def run_weave_evaluation_remote(
+    profile: str,
+    remote_url: str,
+    queries_path: Path,
+    groundtruth_path: Path,
+    limit: int | None = None,
+) -> tuple[dict, weave.Evaluation]:
+    """Run a Weave evaluation against a remote /test endpoint.
+
+    Same as run_weave_evaluation but calls the deployed Cloud Run service
+    instead of running the pipeline locally.
+
+    Returns:
+        Tuple of (results dict, Evaluation object for leaderboard).
+    """
+    rows = load_golden_set_as_dataset(queries_path, limit=limit)
+    dataset = weave.Dataset(name="adversarial-golden-set", rows=rows)
+    weave.publish(dataset)
+
+    model = RemoteRAGModel(
+        name=f"rag-remote-{profile}",
+        profile=profile,
+        remote_url=remote_url,
+        groundtruth_path=str(groundtruth_path),
+    )
+    model.load()
+
+    scorers = [phi_leak_scorer, metadata_leak_scorer, redaction_scorer, injection_scorer, latency_scorer]
+
+    evaluation = weave.Evaluation(
+        name=f"eval-remote-{profile}",
+        dataset=dataset,
+        scorers=scorers,
+        metadata={"profile": profile, "mode": "remote", "remote_url": remote_url, "total_queries": len(rows)},
     )
 
     results = await evaluation.evaluate(model)

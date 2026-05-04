@@ -24,6 +24,10 @@ async def handle_query(body: QueryRequest, request: Request):
         raise HTTPException(status_code=502, detail=f"LLM provider unreachable: {e}")
     except httpx.TimeoutException:
         raise HTTPException(status_code=504, detail="LLM request timed out")
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=502, detail=f"LLM provider returned {e.response.status_code}: {e.response.text[:200]}")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"LLM error ({type(e).__name__}): {e}")
 
     # Map RAGResponse -> QueryResponse
     redacted_entities = []

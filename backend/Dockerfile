@@ -28,7 +28,31 @@ WORKDIR /app
 # --no-dev skips development-only dependencies (pytest, etc.).
 # Reference: https://docs.astral.sh/uv/guides/integration/docker/
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev --no-install-project
+
+# Install CPU-only torch first, then sync remaining deps (skip torch since already installed)
+# --no-install-package torch prevents uv from overwriting with the GPU version from the lockfile
+RUN uv sync --frozen --no-dev --no-install-project \
+    --no-install-package torch \
+    --no-install-package nvidia-cublas-cu12 \
+    --no-install-package nvidia-cuda-cupti-cu12 \
+    --no-install-package nvidia-cuda-nvrtc-cu12 \
+    --no-install-package nvidia-cuda-runtime-cu12 \
+    --no-install-package nvidia-cudnn-cu12 \
+    --no-install-package nvidia-cufft-cu12 \
+    --no-install-package nvidia-cufile-cu12 \
+    --no-install-package nvidia-curand-cu12 \
+    --no-install-package nvidia-cusolver-cu12 \
+    --no-install-package nvidia-cusparse-cu12 \
+    --no-install-package nvidia-cusparselt-cu12 \
+    --no-install-package nvidia-nccl-cu12 \
+    --no-install-package nvidia-nvjitlink-cu12 \
+    --no-install-package nvidia-nvtx-cu12 \
+    --no-install-package nvidia-nvshmem-cu12 \
+    --no-install-package triton \
+    --no-install-package cuda-bindings \
+    --no-install-package cuda-bindings-post11 \
+    && uv pip install torch --index-url https://download.pytorch.org/whl/cpu \
+    && rm -rf /root/.cache/pip /root/.cache/uv
 
 # ---- Stage 6: Pre-download embedding model ----
 # Download the sentence-transformers model at build time so the

@@ -1,0 +1,13 @@
+.git
+.claude
+.venv
+__pycache__
+*.pyc
+experiments/
+fw_l1/
+data/synthea/
+data/evaluation_results/
+backend/.venv
+backend/tests/
+*.egg-info
+.env
