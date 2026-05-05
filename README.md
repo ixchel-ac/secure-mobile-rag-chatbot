@@ -548,9 +548,9 @@ docker compose --profile ollama up -d    # Backend + Ollama + auto model pull
 | **4.9** | BERT NER integrated into FW-L2 as `fw_l2_bert` profile | Done |
 | **4.10** | Recursive chunker fix (overlap within 2048 limit) | Done |
 | **4.11** | Academic evaluation notebooks (5 notebooks on Colab) | Done |
-| **5** | FastAPI Backend (wire routes to pipeline) | **Pending** |
+| **5** | FastAPI Backend (wire routes to pipeline) | Done |
 | **6** | Evaluation + Observability (Weave integration) | Done |
-| **7** | FW-L1 Model Training and ONNX Export | **Pending** |
+| **7** | FW-L1 Model Training and ONNX Export | In progress |
 | **8** | Android App + FW-L1 Integration | **Pending** |
 | **9** | Full System Evaluation | **Pending** |
 
