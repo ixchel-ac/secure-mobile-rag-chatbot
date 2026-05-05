@@ -27,12 +27,12 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -58,26 +58,17 @@ fun getCurrentTime(): String {
 }
 
 @Composable
-fun ChatScreen() {
+fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
     var userInput by remember { mutableStateOf("") }
 
-    val messages = remember {
-        mutableStateListOf(
-            ChatMessage(
-                text = "Hello, I am your healthcare chatbot.",
-                isUser = false,
-                timestamp = getCurrentTime()
-            )
-        )
-    }
+    val messages by viewModel.messages.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
 
     val listState = rememberLazyListState()
-    val scope = rememberCoroutineScope()
 
-    LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) {
-            listState.animateScrollToItem(messages.lastIndex)
-        }
+    LaunchedEffect(messages.size, isLoading) {
+        val itemCount = messages.size + if (isLoading) 1 else 0
+        if (itemCount > 0) listState.animateScrollToItem(itemCount - 1)
     }
 
     Column(
@@ -98,6 +89,9 @@ fun ChatScreen() {
         ) {
             items(messages) { message ->
                 MessageBubble(message)
+            }
+            if (isLoading) {
+                item { TypingIndicator() }
             }
         }
 
@@ -123,26 +117,12 @@ fun ChatScreen() {
 
             Button(
                 onClick = {
-                    if (userInput.isNotBlank()) {
-                        messages.add(
-                            ChatMessage(
-                                text = userInput,
-                                isUser = true,
-                                timestamp = getCurrentTime()
-                            )
-                        )
-
-                        messages.add(
-                            ChatMessage(
-                                text = "Test response from chatbot",
-                                isUser = false,
-                                timestamp = getCurrentTime()
-                            )
-                        )
-
+                    if (userInput.isNotBlank() && !isLoading) {
+                        viewModel.sendMessage(userInput)
                         userInput = ""
                     }
                 },
+                enabled = userInput.isNotBlank() && !isLoading,
                 modifier = Modifier
                     .padding(start = 8.dp)
                     .height(56.dp),
@@ -223,6 +203,24 @@ fun DoctorBotHeader() {
 
         Spacer(modifier = Modifier.height(14.dp))
         HorizontalDivider(color = Color(0xFFE6EEF8))
+    }
+}
+
+@Composable
+fun TypingIndicator() {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.Start
+    ) {
+        Card(
+            shape = RoundedCornerShape(18.dp),
+            elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+            colors = CardDefaults.cardColors(containerColor = BotBubbleBlue)
+        ) {
+            Box(modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp)) {
+                Text(text = "•••", color = DarkText, fontSize = 20.sp)
+            }
+        }
     }
 }
 
