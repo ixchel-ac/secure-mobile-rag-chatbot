@@ -4,6 +4,9 @@ version = "0.1.0"
 description = "Cloud backend for the two-level firewall RAG system"
 requires-python = ">=3.11"
 dependencies = [
+    "transformers>=4.40.0",
+    "torch>=2.0.0",
+    "wandb>=0.25.0",
     "fastapi>=0.110.0",
     "uvicorn[standard]>=0.27.0",
     "sentence-transformers>=2.5.0",
@@ -16,6 +19,10 @@ dependencies = [
     "openai>=1.0.0",
     "weave>=0.51.0",
     "spacy>=3.7.0",
+    "scikit-learn>=1.4.0",
+    "onnx>=1.15.0",
+    "onnxruntime>=1.17.0",
+    "accelerate>=0.30.0",
 ]
 
 [project.scripts]
