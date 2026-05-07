@@ -11,8 +11,8 @@ from app.config import DATA_DIR, INDEX_DIR, EMBEDDING_MODEL, LLM_MODEL, LLM_PROV
 def _resolve_paths():
     """Resolve data and index paths.
 
-    Uses DATA_DIR and INDEX_DIR from config. Relative paths are resolved
-    from the current working directory (expected: backend/).
+    Uses DATA_DIR and INDEX_DIR from config. If DATA_DIR is relative,
+    resolves it from the project root (backend's parent directory).
     """
     data_dir = Path(DATA_DIR).resolve()
     index_dir = Path(INDEX_DIR).resolve()
@@ -29,8 +29,11 @@ COMMAND_GROUPS = {
         "faiss-check":      "Show FAISS index statistics (vectors, sections, health check)",
         "search":           "Interactive search over the FAISS index",
     },
-    "Adversarial Evaluation": {
-        "generate-queries": "Generate the 800-query adversarial golden test set",
+    "Golden Set Generation": {
+        "generate-adversarial-queries":  "Generate the 1,000-query adversarial golden test set",
+        "generate-benign-queries":       "Generate the 1,000-query benign golden test set",
+    },
+    "Evaluation": {
         "evaluate":         "Run adversarial evaluation against the RAG pipeline",
         "leaderboard":      "Run all profiles and publish W&B leaderboard",
     },
@@ -217,12 +220,27 @@ def search():
             print()
 
 
-def generate_queries():
-    """Generate the 800-query adversarial golden test set."""
+def generate_adversarial_queries():
+    """Generate the 1,000-query adversarial golden test set."""
     import subprocess
 
     project_root = Path(__file__).parent.parent.parent
     script = project_root / "data" / "golden_sets" / "generate_adversarial.py"
+
+    if not script.exists():
+        print(f"Error: Generator script not found at {script}")
+        sys.exit(1)
+
+    result = subprocess.run([sys.executable, str(script)], cwd=str(project_root))
+    sys.exit(result.returncode)
+
+
+def generate_benign_queries():
+    """Generate the 1,000-query benign golden test set."""
+    import subprocess
+
+    project_root = Path(__file__).parent.parent.parent
+    script = project_root / "data" / "golden_sets" / "generate_benign.py"
 
     if not script.exists():
         print(f"Error: Generator script not found at {script}")
@@ -408,7 +426,7 @@ def leaderboard():
 
     Examples:
         uv run leaderboard --mode local --profiles naive hardened_fw_l2_base
-        uv run leaderboard --mode remote --remote-url https://mobile-rag-firewall-938910481811.us-west2.run.app
+        uv run leaderboard --mode remote --remote-url https://mobile-rag-firewall-956461831254.us-west2.run.app
     """
     import argparse
     import asyncio
@@ -416,7 +434,7 @@ def leaderboard():
     from app.config import WANDB_PROJECT
     from app.evaluation.leaderboard import run_and_publish
 
-    CLOUD_RUN_URL = "https://mobile-rag-firewall-938910481811.us-west2.run.app"
+    CLOUD_RUN_URL = "https://mobile-rag-firewall-956461831254.us-west2.run.app"
 
     parser = argparse.ArgumentParser(description="Run leaderboard evaluation")
     parser.add_argument("--mode", choices=["local", "remote"], default="local",
@@ -424,12 +442,17 @@ def leaderboard():
     parser.add_argument("--remote-url", default=CLOUD_RUN_URL,
                         help=f"Base URL for remote mode (default: {CLOUD_RUN_URL})")
     parser.add_argument("--profiles", nargs="+",
-                        default=["naive", "naive_fw_l2_base", "hardened", "hardened_fw_l2_base"],
-                        help="Profiles to compare (default: naive naive_fw_l2_base hardened hardened_fw_l2_base)")
+                        default=["naive", "naive_fw_l2_bert", "hardened", "hardened_fw_l2_bert"],
+                        help="Profiles to compare (default: naive naive_fw_l2_bert hardened hardened_fw_l2_bert)")
     parser.add_argument("--limit", type=int, default=None,
                         help="Max queries per profile (default: all)")
     parser.add_argument("--queries", default=None,
-                        help="Path to test queries JSON file")
+                        help="Path to adversarial queries JSON file")
+    parser.add_argument("--benign-queries", default=None,
+                        help="Path to benign queries JSON file (enables combined evaluation "
+                             "with classification metrics). Default: data/golden_sets/benign_queries.json")
+    parser.add_argument("--adversarial-only", action="store_true",
+                        help="Run adversarial queries only (skip benign, no classification metrics)")
     args = parser.parse_args()
 
     data_dir, _, _, index_dir = _resolve_paths()
@@ -437,11 +460,24 @@ def leaderboard():
     queries_path = Path(args.queries) if args.queries else data_dir / "golden_sets" / "adversarial_queries.json"
     groundtruth_path = data_dir / "processed" / "phi_groundtruth.json"
 
+    # Resolve benign queries path
+    if args.adversarial_only:
+        benign_path = None
+    elif args.benign_queries:
+        benign_path = Path(args.benign_queries)
+    else:
+        # Default: include benign queries if the file exists
+        default_benign = data_dir / "golden_sets" / "benign_queries.json"
+        benign_path = default_benign if default_benign.exists() else None
+
     if not queries_path.exists():
         print(f"Error: Query file not found: {queries_path}")
         sys.exit(1)
     if not groundtruth_path.exists():
         print(f"Error: PHI ground truth not found. Run 'uv run ingestion' first.")
+        sys.exit(1)
+    if benign_path and not benign_path.exists():
+        print(f"Error: Benign query file not found: {benign_path}")
         sys.exit(1)
 
     if args.mode == "local":
@@ -462,6 +498,7 @@ def leaderboard():
         limit=args.limit,
         mode=args.mode,
         remote_url=args.remote_url,
+        benign_path=str(benign_path) if benign_path else None,
     ))
 
 

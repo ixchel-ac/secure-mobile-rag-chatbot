@@ -52,8 +52,8 @@ wandb/
 **/wandb/
 
 # ---- Experiments (models are large binaries) ----
-experiments/phi_ner/models/
-experiments/phi_ner/data/
+fw_l2_ner/models/
+fw_l2_ner/data/
 
 # ---- Claude worktrees ----
 .claude/worktrees/

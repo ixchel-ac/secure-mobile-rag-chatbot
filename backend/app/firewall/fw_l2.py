@@ -395,7 +395,7 @@ class BERTNERClassifier:
             raise RuntimeError(
                 f"BERT NER model not found locally ({cache_dir}) "
                 f"and could not pull from W&B: {e}\n"
-                f"Either export locally: cd experiments/phi_ner && uv run ner-export --model distilbert\n"
+                f"Either export locally: cd fw_l2_ner && uv run ner-export --model distilbert\n"
                 f"Or publish to W&B from Colab notebook."
             )
 
@@ -480,7 +480,22 @@ class BERTNERClassifier:
                     end=end,
                     source="ner_bert",
                 ))
-
+        
+        # Safety net: catch Synthea-format names the BERT model missed
+        for match in SYNTHEA_FULL_NAME.finditer(text):
+            already_detected = any(
+                d.start <= match.start() and d.end >= match.end()
+                for d in detections
+            )
+            if not already_detected:
+                detections.append(Detection(
+                    entity_type="NAME",
+                    value=match.group(),
+                    start=match.start(),
+                    end=match.end(),
+                    source="ner_synthea",
+                ))
+                
         return detections
 
 
