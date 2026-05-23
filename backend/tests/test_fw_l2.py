@@ -129,9 +129,9 @@ class TestNERClassifier:
         assert "999-83-1042" not in result.sanitized_text
 
     def test_no_ner_fallback(self):
-        """FW-L2 with use_ner=False falls back to regex only."""
+        """FW-L2 with ner_backend=None falls back to regex only."""
         from app.firewall.fw_l2 import FWL2
-        fw_no_ner = FWL2(use_ner=False)
+        fw_no_ner = FWL2(ner_backend=None)
         result = fw_no_ner.validate("Patient Adah626 Klein929 lives in Pasco.")
         assert "NAME" not in result.detection_summary
         assert "ADDRESS" not in result.detection_summary

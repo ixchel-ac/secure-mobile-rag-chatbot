@@ -61,3 +61,6 @@ fw_l2_ner/data/
 # ---- uv ----
 # uv.lock IS committed (reproducibility guarantee)
 # .venv is not
+backend/app/firewall/__pycache__/
+backend/app/__pycache__/
+backend/app/rag/__pycache__/
