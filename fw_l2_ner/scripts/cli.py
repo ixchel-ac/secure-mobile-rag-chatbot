@@ -68,7 +68,7 @@ def help():
 
 def generate():
     """Generate NER training data from Synthea chunks + ground truth."""
-    from fw_l2_ner.scripts.generate_training_data import main
+    from scripts.generate_training_data import main
     main()
 
 
@@ -80,7 +80,7 @@ def train():
 
 def evaluate():
     """Evaluate a trained model on test cases."""
-    from fw_l2_ner.scripts.evaluate_model import main
+    from scripts.evaluate_model import main
     main()
 
 
@@ -136,7 +136,7 @@ def compare():
     print("  Running test case evaluation...")
     print(f"{'=' * 60}")
 
-    from fw_l2_ner.scripts.evaluate_model import evaluate_spacy, evaluate_finetuned
+    from scripts.evaluate_model import evaluate_spacy, evaluate_finetuned
 
     evaluate_spacy()
     for model_key in ["distilbert", "bert", "roberta"]:
