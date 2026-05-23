@@ -14,7 +14,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .loader import load_all, build_phi_groundtruth, PatientRecord
+from .loader import load_all, build_pii_groundtruth, PatientRecord
 from .cleaner import clean_text
 from .chunker import chunk_patient_record, Chunk
 from app.rag.embedder import Embedder
@@ -130,7 +130,7 @@ def run_ingestion(
             patient_id=record.patient_id,
             patient_name=record.patient_name,
             source_file=record.source_file,
-            phi_entities=record.phi_entities,
+            pii_entities=record.pii_entities,
         )
 
         all_chunks.extend(chunks)
@@ -168,7 +168,7 @@ def run_ingestion_from_records(
             patient_id=record.patient_id,
             patient_name=record.patient_name,
             source_file=record.source_file,
-            phi_entities=record.phi_entities,
+            pii_entities=record.pii_entities,
         )
         all_chunks.extend(chunks)
 
@@ -209,15 +209,15 @@ def run_full_ingestion(
         print("[pipeline] Loading patient records...")
     records = load_all(text_dir, csv_dir)
     report.patients_loaded = len(records)
-    report.patients_matched = sum(1 for r in records if r.phi_entities)
+    report.patients_matched = sum(1 for r in records if r.pii_entities)
 
-    # Step 1.8: Build PHI ground-truth index
+    # Step 1.8: Build PII ground-truth index
     if processed_dir:
         processed_dir = Path(processed_dir)
         phi_output = processed_dir / "phi_groundtruth.json"
         if verbose:
-            print(f"[pipeline] Building PHI ground truth -> {phi_output}")
-        build_phi_groundtruth(csv_dir / "patients.csv", phi_output)
+            print(f"[pipeline] Building PII ground truth -> {phi_output}")
+        build_pii_groundtruth(csv_dir / "patients.csv", phi_output)
 
     # Step 2: Clean and chunk each record
     if verbose:
@@ -231,7 +231,7 @@ def run_full_ingestion(
             patient_id=record.patient_id,
             patient_name=record.patient_name,
             source_file=record.source_file,
-            phi_entities=record.phi_entities,
+            pii_entities=record.pii_entities,
         )
         all_chunks.extend(chunks)
 

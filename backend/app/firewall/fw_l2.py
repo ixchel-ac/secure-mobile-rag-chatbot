@@ -1,4 +1,4 @@
-"""FW-L2: Response validation + PHI/PII anonymization.
+"""FW-L2: Response validation + PII anonymization.
 
 Phase 4:
 - Step 4.1: RegEx scanner for SSN, phone, email, DOB, MRN (UUID), names
@@ -55,10 +55,6 @@ class FWL2Result:
         return len(self.detections) > 0
 
     @property
-    def has_phi(self) -> bool:
-        return self.has_pii
-
-    @property
     def detection_summary(self) -> dict[str, int]:
         """Count detections by type."""
         counts: dict[str, int] = {}
@@ -87,9 +83,9 @@ INJECTION_PATTERNS = [
 
 
 class FWL2:
-    """FW-L2: Response-side firewall for PHI detection and sanitization.
+    """FW-L2: Response-side firewall for PII detection and sanitization.
 
-    Uses regex patterns + NER classifier to detect PHI.
+    Uses regex patterns + NER classifier to detect PII.
     Does NOT use ground truth — that would be cheating. Ground truth
     is only used in the evaluation runner to measure what FW-L2 missed.
 
@@ -130,7 +126,7 @@ class FWL2:
             self.classifier = _ClassifierStub()
 
     def scan_regex(self, text: str) -> list[Detection]:
-        """Step 4.1: Scan text for PHI using regex patterns."""
+        """Step 4.1: Scan text for PII using regex patterns."""
         detections: list[Detection] = []
 
         for entity_type, pattern in PATTERNS.items():
@@ -207,7 +203,7 @@ class FWL2:
 
         Step 4.3: Main entry point called by the RAG pipeline.
 
-        1. Scan for regex PHI patterns (SSN, phone, email, DOB, MRN)
+        1. Scan for regex PII patterns (SSN, phone, email, DOB, MRN)
         2. Detect injection artifacts
         3. Run classifier stub (Step 4.5 — future: NER for names/addresses)
         4. Redact all detections
@@ -220,7 +216,7 @@ class FWL2:
         """
         all_detections: list[Detection] = []
 
-        # Step 4.1: Regex scan
+        # Step 4.1: PII regex scan
         all_detections.extend(self.scan_regex(text))
 
         # Step 4.2: Injection detection
@@ -342,7 +338,7 @@ class NERClassifier:
 
 
 class BERTNERClassifier:
-    """Fine-tuned BERT NER classifier for PHI detection.
+    """Fine-tuned BERT NER classifier for PII detection.
 
     Uses a fine-tuned DistilBERT/BERT model trained on Synthea data
     to detect NAME and ADDRESS entities. More accurate than spaCy

@@ -1,4 +1,4 @@
-"""Fine-tune BERT-like models for PHI NER.
+"""Fine-tune BERT-like models for PII NER.
 
 Supports 3 model architectures for comparison:
   1. distilbert-base-uncased   (~66M params, ~260MB, fastest)
@@ -72,8 +72,8 @@ LABEL_TO_ID = {l: i for i, l in enumerate(LABEL_LIST)}
 ID_TO_LABEL = {i: l for l, i in LABEL_TO_ID.items()}
 
 
-class PHINERDataset(Dataset):
-    """Token classification dataset for PHI NER."""
+class PIINERDataset(Dataset):
+    """Token classification dataset for PII NER."""
 
     def __init__(self, data: list[dict], tokenizer, max_length: int = 256):
         self.data = data
@@ -287,7 +287,7 @@ def train_model(model_key: str, train_data: list, val_data: list):
     # Initialize W&B run
     wandb.init(
         project="mobile-rag-firewall",
-        name=f"phi-ner-{model_key}",
+        name=f"pii-ner-{model_key}",
         config={
             "model": model_name,
             "model_key": model_key,
@@ -298,7 +298,7 @@ def train_model(model_key: str, train_data: list, val_data: list):
             "val_size": len(val_data),
             "labels": LABEL_LIST,
         },
-        tags=["phi-ner", model_key],
+        tags=["pii-ner", model_key],
     )
 
     # Load tokenizer and model
@@ -311,8 +311,8 @@ def train_model(model_key: str, train_data: list, val_data: list):
     )
 
     # Create datasets
-    train_dataset = PHINERDataset(train_data, tokenizer)
-    val_dataset = PHINERDataset(val_data, tokenizer)
+    train_dataset = PIINERDataset(train_data, tokenizer)
+    val_dataset = PIINERDataset(val_data, tokenizer)
 
     # Data collator handles padding
     data_collator = DataCollatorForTokenClassification(tokenizer)
@@ -320,7 +320,7 @@ def train_model(model_key: str, train_data: list, val_data: list):
     # Training arguments
     training_args = TrainingArguments(
         output_dir=str(output_dir),
-        run_name=f"phi-ner-{model_key}",
+        run_name=f"pii-ner-{model_key}",
         report_to="wandb",
         num_train_epochs=config["epochs"],
         per_device_train_batch_size=config["batch_size"],
@@ -415,7 +415,7 @@ async def run_weave_evaluation(model_key: str, test_data: list):
 def main():
     import asyncio
 
-    parser = argparse.ArgumentParser(description="Train PHI NER model")
+    parser = argparse.ArgumentParser(description="Train PII NER model")
     parser.add_argument(
         "--model", default="distilbert",
         choices=list(MODEL_CONFIGS.keys()) + ["all"],

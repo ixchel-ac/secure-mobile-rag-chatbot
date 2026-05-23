@@ -1,4 +1,4 @@
-"""Generate NER training data from Synthea chunks + PHI ground truth.
+"""Generate NER training data from Synthea chunks + PII ground truth.
 
 Creates BIO-tagged training data for fine-tuning BERT NER models.
 Each token is labeled as B-NAME, I-NAME, B-ADDRESS, I-ADDRESS, or O (outside).
@@ -92,18 +92,18 @@ def assign_bio_tags(
     return tags
 
 
-def create_training_example(text: str, phi: dict) -> dict | None:
-    """Create a single NER training example from text + PHI."""
+def create_training_example(text: str, pii: dict) -> dict | None:
+    """Create a single NER training example from text + PII."""
     spans = []
 
     # Find name occurrences
     for name_key in ["full_name", "name"]:
-        name = phi.get(name_key, "")
+        name = pii.get(name_key, "")
         if name and len(name) > 3:
             spans.extend(find_entity_spans(text, name, "NAME"))
 
     # Find address occurrences
-    address = phi.get("address", "")
+    address = pii.get("address", "")
     if address and len(address) > 10:
         spans.extend(find_entity_spans(text, address, "ADDRESS"))
 
@@ -139,12 +139,12 @@ def generate_from_chunks(chunks: list[dict], groundtruth: dict) -> list[dict]:
     for chunk in chunks:
         patient_id = chunk.get("patient_id", "")
         text = chunk.get("text", "")
-        phi = groundtruth.get(patient_id)
+        pii = groundtruth.get(patient_id)
 
-        if not phi or not text:
+        if not pii or not text:
             continue
 
-        example = create_training_example(text, phi)
+        example = create_training_example(text, pii)
         if example:
             examples.append(example)
 
@@ -152,7 +152,7 @@ def generate_from_chunks(chunks: list[dict], groundtruth: dict) -> list[dict]:
 
 
 def generate_synthetic_responses(groundtruth: dict, count: int = 500) -> list[dict]:
-    """Generate synthetic LLM responses that contain PHI (for training).
+    """Generate synthetic LLM responses that contain PII (for training).
 
     These simulate what the naive prompt would produce — responses that
     freely include names, addresses, SSNs, DOBs.
@@ -161,7 +161,7 @@ def generate_synthetic_responses(groundtruth: dict, count: int = 500) -> list[di
         "The patient {name} was born on {dob}. Their address is {address}.",
         "Patient demographics: {name}, DOB: {dob}, residing at {address}.",
         "Based on the records, {name} lives at {address}.",
-        "{name} -- DEMOGRAPHICS: Address: {address}, Birth Date: {dob}.",
+        "{name} -- DEMOGRAPIICS: Address: {address}, Birth Date: {dob}.",
         "The patient's name is {name}. They can be reached at {address}.",
         "Medical record for {name}: Date of birth {dob}, home address {address}.",
         "Demographics show {name}, born {dob}, address on file: {address}.",
@@ -189,7 +189,7 @@ def generate_synthetic_responses(groundtruth: dict, count: int = 500) -> list[di
 
 
 def generate_negative_examples(count: int = 200) -> list[dict]:
-    """Generate clean medical text with no PHI (negative examples). V1 original."""
+    """Generate clean medical text with no PII (negative examples). V1 original."""
     templates = [
         "The patient is taking Aspirin 81mg daily for cardiovascular protection.",
         "Diagnosed with essential hypertension on 2020-01-15.",
@@ -225,7 +225,7 @@ def generate_negative_examples_v2(count: int = 500) -> list[dict]:
     """Generate enhanced negative examples with numbers that are NOT addresses (V2).
 
     Teaches the model that standalone numbers, list numbers, vitals,
-    dosages, and clinical measurements are NOT PHI entities.
+    dosages, and clinical measurements are NOT PII entities.
     """
     templates = [
         # Original templates
@@ -275,7 +275,7 @@ def generate_negative_examples_v2(count: int = 500) -> list[dict]:
         "Lab work ordered, results expected in 3-5 business days.",
         "The condition has persisted for approximately 6 months.",
         "Patient was seen 4 times in the last year.",
-        # Clinical codes and identifiers (NOT PHI)
+        # Clinical codes and identifiers (NOT PII)
         "ICD-10 code: I10 (Essential hypertension).",
         "CPT code 99213 for office visit.",
         "SNOMED CT: 38341003 (Hypertension).",
@@ -343,7 +343,7 @@ def generate_synthetic_responses_v2(groundtruth: dict, count: int = 800) -> list
         "The patient {name} was born on {dob}. Their address is {address}.",
         "Patient demographics: {name}, DOB: {dob}, residing at {address}.",
         "Based on the records, {name} lives at {address}.",
-        "{name} -- DEMOGRAPHICS: Address: {address}, Birth Date: {dob}.",
+        "{name} -- DEMOGRAPIICS: Address: {address}, Birth Date: {dob}.",
         "The patient's name is {name}. They can be reached at {address}.",
         "Medical record for {name}: Date of birth {dob}, home address {address}.",
         "Demographics show {name}, born {dob}, address on file: {address}.",

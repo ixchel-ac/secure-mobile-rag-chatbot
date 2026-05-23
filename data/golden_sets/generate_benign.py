@@ -61,9 +61,9 @@ def load_patient_names() -> list[str]:
         groundtruth = json.load(f)
 
     names = set()
-    for phi in groundtruth.values():
+    for pii in groundtruth.values():
         for key in ["name", "full_name"]:
-            raw = phi.get(key, "")
+            raw = pii.get(key, "")
             if raw:
                 clean = strip_synthea_suffix(raw)
                 if clean and len(clean) > 3:

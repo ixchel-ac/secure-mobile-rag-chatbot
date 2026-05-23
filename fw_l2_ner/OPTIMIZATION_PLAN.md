@@ -1,4 +1,4 @@
-# PHI NER Model — Optimization Plan
+# PII NER Model — Optimization Plan
 
 **Goal:** Fix NAME/ADDRESS confusion and missed-name false negatives observed in production LLM responses.
 
@@ -115,7 +115,7 @@ def oversample_entity_examples(data: list[dict], factor: int = 3) -> list[dict]:
 Then call it in `train_model()`:
 
 ```python
-# train.py — inside train_model(), before creating PHINERDataset (~line 314)
+# train.py — inside train_model(), before creating PIINERDataset (~line 314)
 
 # Apply 3x oversampling of entity-rich examples
 train_data = oversample_entity_examples(train_data, factor=3)
@@ -332,15 +332,15 @@ def generate_clean_name_responses(groundtruth: dict, count: int = 800) -> list[d
             address=patient["address"],
         )
 
-        # Create PHI dict with clean name for span matching
-        clean_phi = {
+        # Create PII dict with clean name for span matching
+        clean_pii = {
             "name": strip_synthea_suffix(patient["name"]),
             "full_name": strip_synthea_suffix(patient["full_name"]),
             "address": patient["address"],
             "dob": patient["dob"],
         }
 
-        example = create_training_example(text, clean_phi)
+        example = create_training_example(text, clean_pii)
         if example:
             examples.append(example)
 
@@ -487,19 +487,19 @@ Also update `generate_from_chunks()` to produce clean-name variants alongside or
 if args_version == "v3":
     clean_text = text
     for name_key in ["full_name", "name"]:
-        original = phi.get(name_key, "")
+        original = pii.get(name_key, "")
         if original:
             clean = strip_synthea_suffix(original)
             clean_text = clean_text.replace(original, clean)
 
     if clean_text != text:
-        clean_phi = {
-            "name": strip_synthea_suffix(phi["name"]),
-            "full_name": strip_synthea_suffix(phi["full_name"]),
-            "address": phi["address"],
-            "dob": phi["dob"],
+        clean_pii = {
+            "name": strip_synthea_suffix(pii["name"]),
+            "full_name": strip_synthea_suffix(pii["full_name"]),
+            "address": pii["address"],
+            "dob": pii["dob"],
         }
-        clean_example = create_training_example(clean_text, clean_phi)
+        clean_example = create_training_example(clean_text, clean_pii)
         if clean_example:
             examples.append(clean_example)
 ```

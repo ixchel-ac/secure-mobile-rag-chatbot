@@ -1,4 +1,4 @@
-"""CLI entry points for PHI NER experiments.
+"""CLI entry points for PII NER experiments.
 
 Usage (from fw_l2_ner/):
     uv run ner-help                          # Show all commands
@@ -73,7 +73,7 @@ def generate():
 
 
 def train():
-    """Fine-tune a BERT model for PHI NER."""
+    """Fine-tune a BERT model for PII NER."""
     from fw_l2_ner.scripts.train import main
     main()
 

@@ -16,7 +16,7 @@ class QueryResponse(BaseModel):
     response: str = Field(..., description="The anonymized LLM response")
     redacted_entities: list[str] = Field(
         default_factory=list,
-        description="List of PHI entities that were redacted by FW-L2",
+        description="List of PII entities that were redacted by FW-L2",
     )
     sources: list[str] = Field(
         default_factory=list,
@@ -49,12 +49,12 @@ class TestResponse(BaseModel):
     raw_response: str = Field(..., description="The raw LLM response before FW-L2")
     profile: str = Field(..., description="The evaluation profile used")
     model: str = Field(..., description="LLM model used")
-    redacted_entities: list[str] = Field(default_factory=list, description="PHI entity types detected")
-    was_redacted: bool = Field(..., description="Whether FW-L2 redacted any PHI")
+    redacted_entities: list[str] = Field(default_factory=list, description="PII entity types detected")
+    was_redacted: bool = Field(..., description="Whether FW-L2 redacted any PII")
     injection_detected: bool = Field(..., description="Whether injection patterns were found")
     sources: list[str] = Field(default_factory=list, description="Source files used")
     sections_retrieved: list[str] = Field(default_factory=list, description="Chunk sections retrieved")
-    fw_l2_passed: bool = Field(..., description="Whether FW-L2 validation passed (no PHI, no injection)")
+    fw_l2_passed: bool = Field(..., description="Whether FW-L2 validation passed (no PII, no injection)")
 
 
 class IngestRequest(BaseModel):

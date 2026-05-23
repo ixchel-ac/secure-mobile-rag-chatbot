@@ -4,7 +4,7 @@ Phase 1, Step 1.4:
 - Split at section boundaries (MEDICATIONS, CONDITIONS, OBSERVATIONS, etc.)
 - Each section becomes one chunk
 - If a section exceeds 512 tokens (~2048 chars), apply recursive splitting with overlap
-- Attach metadata: patient_id, patient_name, section, source_file, phi_entities
+- Attach metadata: patient_id, patient_name, section, source_file, pii_entities
 """
 
 from __future__ import annotations
@@ -144,7 +144,7 @@ def chunk_patient_record(
     patient_id: str,
     patient_name: str,
     source_file: str,
-    phi_entities: dict,
+    pii_entities: dict,
 ) -> list[Chunk]:
     """Chunk a single cleaned patient record into section-based chunks.
 
@@ -156,7 +156,7 @@ def chunk_patient_record(
         patient_id: UUID from patients.csv
         patient_name: Patient name from file header
         source_file: Original filename
-        phi_entities: Dict with ssn, dob, name, address from CSV
+        pii_entities: dict with ssn, dob, name, address from CSV
 
     Returns:
         List of Chunk objects ready for embedding.
@@ -165,15 +165,15 @@ def chunk_patient_record(
     chunks: list[Chunk] = []
 
     for section_name, content in sections:
-        # Inject PHI into DEMOGRAPHICS chunk (simulates real EHR records)
-        if section_name == "DEMOGRAPHICS" and phi_entities:
-            phi_block = ""
-            if phi_entities.get("ssn"):
-                phi_block += f"SSN:                 {phi_entities['ssn']}\n"
-            if phi_entities.get("address"):
-                phi_block += f"Address:             {phi_entities['address']}\n"
-            if phi_block:
-                content = phi_block + content
+        # Inject PII into DEMOGRAPHICS chunk (simulates real EHR records)
+        if section_name == "DEMOGRAPHICS" and pii_entities:
+            pii_block = ""
+            if pii_entities.get("ssn"):
+                pii_block += f"SSN:                 {pii_entities['ssn']}\n"
+            if pii_entities.get("address"):
+                pii_block += f"Address:             {pii_entities['address']}\n"
+            if pii_block:
+                content = pii_block + content
 
         # Prepend section context to the text for better embeddings
         section_text = f"{patient_name} -- {section_name}: {content}"
@@ -191,7 +191,7 @@ def chunk_patient_record(
                     "patient_name": patient_name,
                     "section": section_name,
                     "source_file": source_file,
-                    "phi_entities": phi_entities,
+                    "pii_entities": pii_entities,
                     "chunk_index": i,
                     "total_section_chunks": len(text_pieces),
                 },
@@ -220,7 +220,7 @@ if __name__ == "__main__":
         patient_id=record.patient_id,
         patient_name=record.patient_name,
         source_file=record.source_file,
-        phi_entities=record.phi_entities,
+        pii_entities=record.pii_entities,
     )
 
     print(f"=== Generated {len(chunks)} chunks ===\n")

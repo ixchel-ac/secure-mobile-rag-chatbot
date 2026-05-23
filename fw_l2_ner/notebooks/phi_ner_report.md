@@ -1,4 +1,4 @@
-# PHI NER Model — Analysis Report
+# PII NER Model — Analysis Report
 
 **Fine-tuning DistilBERT, BERT, and RoBERTa to detect patient names and addresses in LLM responses for the FW-L2 response firewall.**
 
@@ -16,13 +16,13 @@
 
 ## 1. Background and Motivation
 
-The FW-L2 response firewall uses regex to catch structured PHI such as SSNs, phone numbers, email addresses, and dates of birth. However, regex cannot reliably detect free-form patient names (e.g. `Adah626 Klein929`) or narrative addresses (e.g. `308 Deckow Union, Pasco`). Three BERT-family models were fine-tuned on BIO-tagged token sequences generated from Synthea patient records to fill this gap.
+The FW-L2 response firewall uses regex to catch structured PII such as SSNs, phone numbers, email addresses, and dates of birth. However, regex cannot reliably detect free-form patient names (e.g. `Adah626 Klein929`) or narrative addresses (e.g. `308 Deckow Union, Pasco`). Three BERT-family models were fine-tuned on BIO-tagged token sequences generated from Synthea patient records to fill this gap.
 
 ---
 
 ## 2.1 Dataset Overview
 
-Training data was generated locally via `experiments/phi_ner/scripts/generate_training_data.py` and published to Weave. Each example contains a `tokens` list and a corresponding `ner_tags` list in BIO format. Approximately **40% of examples** contain at least one PHI entity.
+Training data was generated locally via `experiments/phi_ner/scripts/generate_training_data.py` and published to Weave. Each example contains a `tokens` list and a corresponding `ner_tags` list in BIO format. Approximately **40% of examples** contain at least one PII entity.
 
 | Split | Examples |
 |---|---|
@@ -98,7 +98,7 @@ Epoch   Train Loss   Val Loss   F1 Entity
 
 > **Note:** The baseline test F1 reported throughout sections 5–13 is 0.9734, reflecting the standard configuration (5 epochs, no oversampling). The ablation study in Section 7 identifies a clear path to ~0.986 through training-only changes.
 
-Strict entity-level matching via `seqeval` with `mode='strict'` requires the predicted span to exactly match the true span in both position and type. A partial match (e.g. predicting `Adah626 Flo729` when the true entity is `Adah626 Flo729 Klein929`) counts as a complete miss. This is the correct metric for a PHI firewall, where a partially-redacted name still leaks patient data.
+Strict entity-level matching via `seqeval` with `mode='strict'` requires the predicted span to exactly match the true span in both position and type. A partial match (e.g. predicting `Adah626 Flo729` when the true entity is `Adah626 Flo729 Klein929`) counts as a complete miss. This is the correct metric for a PII firewall, where a partially-redacted name still leaks patient data.
 
 ```
 Example:
@@ -180,7 +180,7 @@ Each experiment removes or modifies one component of the training data.
 
 **`no_synthetic` is the most important finding in the entire study.** Removing Synthea-generated synthetic examples caused a 10 percentage point drop — by far the largest degradation of any experiment across all three categories. The validation loss for this run was elevated throughout (0.005 vs 0.001 for the baseline), and F1 never recovered past 0.901 even after 5 epochs. This tells you that the synthetic examples are not helpful padding — they are the primary source of learning signal. Any future data pipeline work must protect and expand the Synthea generator first.
 
-**`no_negatives`** produced a small but real drop of 0.3 points. Negative examples — text with no PHI — teach the model what not to flag. Removing them predictably increases false positives. The drop is modest enough that you could reduce negatives slightly to speed up training, but removing them entirely is not worth the cost.
+**`no_negatives`** produced a small but real drop of 0.3 points. Negative examples — text with no PII — teach the model what not to flag. Removing them predictably increases false positives. The drop is modest enough that you could reduce negatives slightly to speed up training, but removing them entirely is not worth the cost.
 
 **`names_only` and `addresses_only`** are diagnostic experiments rather than practical configurations. When ADDRESS labels are masked and the model is trained on NAME only, F1 collapses to 0.55 — not because the model fails at names, but because macro F1 averages across both entity types and ADDRESS scores zero on the test set. More revealing is the training curve: validation F1 was completely flat at 0.5675 across all 5 epochs while validation loss *increased* every epoch (0.160 → 0.179). Training loss dropped normally, indicating overfitting to the name-only signal. This suggests the two entity types provide complementary structural context during training — the model learns better entity boundaries when both types are present simultaneously.
 
@@ -239,7 +239,7 @@ Larger batch size wins here and is also faster — batch 8 took 7 minutes versus
 
 ### 7.3 Class Imbalance
 
-The training data is heavily imbalanced: 99.2% of tokens are `O` (not PHI). The model could theoretically achieve 99% token accuracy by predicting `O` for everything. Oversampling addresses this by duplicating entity-rich examples 3× in the training set.
+The training data is heavily imbalanced: 99.2% of tokens are `O` (not PII). The model could theoretically achieve 99% token accuracy by predicting `O` for everything. Oversampling addresses this by duplicating entity-rich examples 3× in the training set.
 
 | Experiment | Training examples | Test F1 |
 |---|---|---|
@@ -284,14 +284,14 @@ DistilBERT's P50 latency of 27.6 ms is approximately **33% faster** than BERT an
 
 ---
 
-## 10. Error Analysis — False Negatives (Missed PHI)
+## 10. Error Analysis — False Negatives (Missed PII)
 
 Running the best model on the full 1,861-example test set produced the following confusion summary:
 
 | Outcome | Count |
 |---|---|
 | Correct | 1,532 |
-| False Negatives (missed PHI) | 93 |
+| False Negatives (missed PII) | 93 |
 | False Positives (over-redaction) | 264 |
 
 ### False negatives by entity type
@@ -314,7 +314,7 @@ Running the best model on the full 1,861-example test set produced the following
 
 The dominant failure mode (58 of 93 misses) is **single-token address entities** — isolated city or location names appearing inside institutional names such as `ENCOUNTER AT SWEDISH EDMONDS`. These are genuinely ambiguous without surrounding multi-token context, and the same token (`EDMONDS`) appears repeatedly across multiple test records, inflating the raw count. The second-largest failure category (28) covers Synthea-style names with numeric suffixes that happen to appear at the start of a record header (e.g. `Medical record for Riley817 Jarod376 Spinka232:`), where the trailing colon may be disrupting span detection.
 
-> **Safety note:** Single-token address misses are the highest-risk category from a PHI leakage perspective. These tokens appear in clinical encounter records and contain location data that could identify a patient's treatment facility or geographic area.
+> **Safety note:** Single-token address misses are the highest-risk category from a PII leakage perspective. These tokens appear in clinical encounter records and contain location data that could identify a patient's treatment facility or geographic area.
 
 ---
 
@@ -342,7 +342,7 @@ Error rate was examined against two text properties to understand when the model
 
 **Error rate vs text length:** Error rates were highest for very short texts (0–50 tokens) and lowest for medium-length texts (50–200 tokens). Long texts (200+ tokens) showed a moderate increase, which is expected as more entities appear per example and the probability of at least one miss increases.
 
-**Error rate vs entity density:** Entity-dense texts (many PHI spans per 100 tokens) showed elevated error rates in medium-density bins, consistent with the hypothesis that closely-packed entities create boundary confusion for the model.
+**Error rate vs entity density:** Entity-dense texts (many PII spans per 100 tokens) showed elevated error rates in medium-density bins, consistent with the hypothesis that closely-packed entities create boundary confusion for the model.
 
 ---
 
@@ -384,7 +384,7 @@ The following improvements are ranked by estimated F1 gain and implementation co
 
 1. **Train for 10 epochs instead of 5** *(ablation study — +1.3 F1 points, ~5 extra minutes on T4):* The ablation study showed validation F1 continued climbing to 0.9917 at epoch 10 with no sign of overfitting. Early stopping was triggering prematurely at epoch 5. Change `num_train_epochs=10` and remove or increase the early stopping patience to 3–4.
 
-2. **Apply 3× oversampling of entity-rich examples** *(ablation study — +1.2 F1 points, zero new data required):* Duplicating examples with at least one PHI entity 3× in the training set directly addresses the 99.2% class imbalance. Combined with recommendation 1, the projected test F1 moves from 0.9734 to approximately 0.986–0.988.
+2. **Apply 3× oversampling of entity-rich examples** *(ablation study — +1.2 F1 points, zero new data required):* Duplicating examples with at least one PII entity 3× in the training set directly addresses the 99.2% class imbalance. Combined with recommendation 1, the projected test F1 moves from 0.9734 to approximately 0.986–0.988.
 
 3. **Protect and expand the synthetic data pipeline** *(ablation study — prevents -10 F1 point collapse):* The `no_synthetic` ablation showed a 10-point drop when synthetic examples were removed. The Synthea generator is the single most important component of the training pipeline. Any future data work should prioritise expanding its coverage, particularly for clinical encounter records involving multi-word institutional names.
 

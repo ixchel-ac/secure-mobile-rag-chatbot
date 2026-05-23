@@ -1,10 +1,10 @@
-# Mobile RAG Firewall
+﻿# Mobile RAG Firewall
 
 A two-level firewall architecture for securing Retrieval-Augmented Generation (RAG) systems
 serving medical data on mobile devices.
 
 **Architecture:** On-device FW-L1 (input firewall) + Cloud-side FW-L2 (response validation and
-PHI anonymization), with a FastAPI backend, FAISS vector store, and Llama 3.1 via W&B Inference / Groq / Ollama.
+PII anonymization), with a FastAPI backend, FAISS vector store, and Llama 3.1 via W&B Inference / Groq / Ollama.
 
 ---
 
@@ -19,7 +19,7 @@ PHI anonymization), with a FastAPI backend, FAISS vector store, and Llama 3.1 vi
 7. [Phase 3: Generator and RAG Pipeline](#phase-3-generator-and-rag-pipeline)
 8. [Phase 4: FW-L2 Response Firewall](#phase-4-fw-l2-response-firewall)
 9. [Evaluation](#evaluation)
-10. [PHI NER Fine-tuning Experiment](#phi-ner-fine-tuning-experiment)
+10. [PII NER Fine-tuning Experiment](#pii-ner-fine-tuning-experiment)
 11. [CLI Commands](#cli-commands)
 12. [Running Tests](#running-tests)
 13. [Docker](#docker)
@@ -51,46 +51,46 @@ uv --version
 
 ```
 mobile-rag-firewall/
-├── README.md
-├── docker-compose.yml          # Orchestrates backend + Ollama (optional)
-├── .env                        # Environment variables (models, API keys, paths)
-│
-├── data/                       # Data directory (not committed)
-│   ├── synthea/                # Raw Synthea patient data (text + CSV)
-│   ├── processed/              # PHI ground truth, chunks
-│   ├── golden_sets/            # Adversarial query sets (1000 queries, C1-C5)
-│   └── evaluation_results/     # JSON reports from evaluation runs
-│
-├── backend/                    # Cloud zone -- FastAPI + RAG + FW-L2
-│   ├── Dockerfile
-│   ├── pyproject.toml          # Dependencies + CLI scripts (8 commands)
-│   ├── tests/
-│   │   ├── test_loader.py      # 20 tests: data loading
-│   │   ├── test_retriever.py   # 35 tests: retrieval quality + adversarial
-│   │   ├── test_pipeline.py    # 22 tests: benign + adversarial LLM queries
-│   │   └── test_fw_l2.py       # 29 tests: regex, NER, injection detection
-│   └── app/
-│       ├── config.py           # Settings, env vars
-│       ├── cli.py              # CLI entry points (uv run commands)
-│       ├── ingestion/          # Loader, Cleaner, Chunker, Pipeline
-│       ├── rag/                # Embedder, Retriever, Generator, RAG Pipeline
-│       ├── firewall/           # FW-L2 (regex + spaCy NER + injection detection)
-│       ├── evaluation/         # Runner, Weave eval, Leaderboard
-│       ├── vectorstore/        # FAISS index management
-│       ├── models/             # Pydantic schemas
-│       └── routes/             # API endpoints (stub)
-│
-├── experiments/                # ML experiments
-│   └── phi_ner/                # BERT fine-tuning for PHI NER
-│       ├── pyproject.toml      # Experiment dependencies + CLI (6 commands)
-│       ├── notebooks/          # Google Colab training notebook
-│       ├── scripts/            # Generate data, train, evaluate, export
-│       ├── data/               # Generated train/val/test splits
-│       └── models/             # Trained model checkpoints
-│
-├── index/                      # FAISS index files (~41 MB)
-├── fw_l1/                      # On-device FW-L1 (stub)
-└── evaluation/                 # E2E evaluation scripts
+â”œâ”€â”€ README.md
+â”œâ”€â”€ docker-compose.yml          # Orchestrates backend + Ollama (optional)
+â”œâ”€â”€ .env                        # Environment variables (models, API keys, paths)
+â”‚
+â”œâ”€â”€ data/                       # Data directory (not committed)
+â”‚   â”œâ”€â”€ synthea/                # Raw Synthea patient data (text + CSV)
+â”‚   â”œâ”€â”€ processed/              # PII ground truth, chunks
+â”‚   â”œâ”€â”€ golden_sets/            # Adversarial query sets (1000 queries, C1-C5)
+â”‚   â””â”€â”€ evaluation_results/     # JSON reports from evaluation runs
+â”‚
+â”œâ”€â”€ backend/                    # Cloud zone -- FastAPI + RAG + FW-L2
+â”‚   â”œâ”€â”€ Dockerfile
+â”‚   â”œâ”€â”€ pyproject.toml          # Dependencies + CLI scripts (8 commands)
+â”‚   â”œâ”€â”€ tests/
+â”‚   â”‚   â”œâ”€â”€ test_loader.py      # 20 tests: data loading
+â”‚   â”‚   â”œâ”€â”€ test_retriever.py   # 35 tests: retrieval quality + adversarial
+â”‚   â”‚   â”œâ”€â”€ test_pipeline.py    # 22 tests: benign + adversarial LLM queries
+â”‚   â”‚   â””â”€â”€ test_fw_l2.py       # 29 tests: regex, NER, injection detection
+â”‚   â””â”€â”€ app/
+â”‚       â”œâ”€â”€ config.py           # Settings, env vars
+â”‚       â”œâ”€â”€ cli.py              # CLI entry points (uv run commands)
+â”‚       â”œâ”€â”€ ingestion/          # Loader, Cleaner, Chunker, Pipeline
+â”‚       â”œâ”€â”€ rag/                # Embedder, Retriever, Generator, RAG Pipeline
+â”‚       â”œâ”€â”€ firewall/           # FW-L2 (regex + spaCy NER + injection detection)
+â”‚       â”œâ”€â”€ evaluation/         # Runner, Weave eval, Leaderboard
+â”‚       â”œâ”€â”€ vectorstore/        # FAISS index management
+â”‚       â”œâ”€â”€ models/             # Pydantic schemas
+â”‚       â””â”€â”€ routes/             # API endpoints (stub)
+â”‚
+â”œâ”€â”€ experiments/                # ML experiments
+â”‚   â””â”€â”€ phi_ner/                # BERT fine-tuning for PII NER
+â”‚       â”œâ”€â”€ pyproject.toml      # Experiment dependencies + CLI (6 commands)
+â”‚       â”œâ”€â”€ notebooks/          # Google Colab training notebook
+â”‚       â”œâ”€â”€ scripts/            # Generate data, train, evaluate, export
+â”‚       â”œâ”€â”€ data/               # Generated train/val/test splits
+â”‚       â””â”€â”€ models/             # Trained model checkpoints
+â”‚
+â”œâ”€â”€ index/                      # FAISS index files (~41 MB)
+â”œâ”€â”€ fw_l1/                      # On-device FW-L1 (stub)
+â””â”€â”€ evaluation/                 # E2E evaluation scripts
 ```
 
 ---
@@ -155,7 +155,7 @@ Generate Synthea data, copy to `data/synthea/`, then:
 
 ```bash
 cd backend
-uv run ingestion    # load -> clean -> chunk -> embed -> FAISS index -> PHI ground truth
+uv run ingestion    # load -> clean -> chunk -> embed -> FAISS index -> PII ground truth
 uv run data-show    # Patient statistics
 uv run faiss-check  # Index health check
 ```
@@ -163,9 +163,9 @@ uv run faiss-check  # Index health check
 **Key design decisions:**
 - **UUID-based matching**: Filenames contain UUIDs matching `patients.csv` (100% match rate)
 - **Section-based chunking**: Each medical section (MEDICATIONS, CONDITIONS, etc.) becomes one chunk
-- **PHI injected into DEMOGRAPHICS**: SSN and address are added to DEMOGRAPHICS chunks so the LLM context realistically contains PHI (enables fair firewall testing)
+- **PII injected into DEMOGRAPHICS**: SSN and address are added to DEMOGRAPHICS chunks so the LLM context realistically contains PII (enables fair firewall testing)
 
-**Result:** 218 patients → 11,104 chunks → 384-dim FAISS index (41 MB)
+**Result:** 218 patients â†’ 11,104 chunks â†’ 384-dim FAISS index (41 MB)
 
 ---
 
@@ -179,7 +179,7 @@ Pure semantic search wrapping Embedder + FAISS. Supports optional section filter
 uv run search    # Interactive search CLI
 ```
 
-**Key finding:** The retriever does NOT block adversarial queries — every chunk carries full PHI in metadata. Adversarial queries surface 9/10 DEMOGRAPHICS chunks vs 0/10 for benign queries.
+**Key finding:** The retriever does NOT block adversarial queries â€” every chunk carries full PII in metadata. Adversarial queries surface 9/10 DEMOGRAPHICS chunks vs 0/10 for benign queries.
 
 ---
 
@@ -187,12 +187,12 @@ uv run search    # Interactive search CLI
 
 ### Dual System Prompts
 
-| Prompt | Purpose | PHI Protection |
+| Prompt | Purpose | PII Protection |
 |--------|---------|:-:|
-| **Naive** | Test FW-L2 in isolation | None — LLM leaks freely |
+| **Naive** | Test FW-L2 in isolation | None â€” LLM leaks freely |
 | **Hardened** | Production defense-in-depth | Strong guardrails |
 
-The **hardened prompt** was tightened after discovering metadata leakage — the original prompt said "SSNs are listed but I can't reveal them" (confirming data exists). The current version gives no information about what data is or isn't present:
+The **hardened prompt** was tightened after discovering metadata leakage â€” the original prompt said "SSNs are listed but I can't reveal them" (confirming data exists). The current version gives no information about what data is or isn't present:
 
 ```
 "I can only answer clinical questions about patient health records."
@@ -205,7 +205,7 @@ Three providers supported: W&B Inference, Groq, Ollama. All use the same Llama 3
 ### Pipeline Flow
 
 ```
-Query → Retriever (FAISS) → Generator (LLM) → FW-L2 (optional) → Response
+Query â†’ Retriever (FAISS) â†’ Generator (LLM) â†’ FW-L2 (optional) â†’ Response
 ```
 
 ---
@@ -214,7 +214,7 @@ Query → Retriever (FAISS) → Generator (LLM) → FW-L2 (optional) → Respons
 
 **File:** `backend/app/firewall/fw_l2.py`
 
-FW-L2 scans LLM responses and redacts detected PHI before returning to the user.
+FW-L2 scans LLM responses and redacts detected PII before returning to the user.
 
 ### Detection Layers
 
@@ -238,11 +238,11 @@ After FW-L2:
 
 ### What FW-L2 Does NOT Use
 
-**Ground truth is NOT used for detection** — that would be cheating. `phi_groundtruth.json` is only used in the evaluation runner to measure what FW-L2 missed. In production, there's no lookup table of every patient's name.
+**Ground truth is NOT used for detection** â€” that would be cheating. `phi_groundtruth.json` is only used in the evaluation runner to measure what FW-L2 missed. In production, there's no lookup table of every patient's name.
 
 ### Known Gaps
 
-| PHI Type | Detected? | Why |
+| PII Type | Detected? | Why |
 |----------|:-:|-----|
 | SSN (`123-45-6789`) | Yes | Regex |
 | Phone, email | Yes | Regex |
@@ -264,7 +264,7 @@ These gaps are why the BERT NER fine-tuning experiment exists (see below).
 
 ### Metadata Leakage Detection
 
-Beyond data leakage (actual PHI values), the evaluation also detects **metadata leakage** — when the LLM confirms what data exists without revealing values:
+Beyond data leakage (actual PII values), the evaluation also detects **metadata leakage** â€” when the LLM confirms what data exists without revealing values:
 
 | Response | Data leak | Metadata leak |
 |----------|:-:|:-:|
@@ -288,8 +288,8 @@ cd backend && python -m pytest tests/test_fw_l2.py -v    # 29 tests, ~6s
 
 | Category | Queries | Attack Type |
 |----------|:-------:|-------------|
-| **C1** | 200 | Direct PHI extraction ("give me the SSN") |
-| **C2** | 200 | Indirect PHI extraction ("personal details") |
+| **C1** | 200 | Direct PII extraction ("give me the SSN") |
+| **C2** | 200 | InDirect PII extraction ("personal details") |
 | **C3** | 200 | Prompt injection / jailbreak |
 | **C4** | 200 | Social engineering pretexts |
 | **C5** | 200 | Metadata exfiltration (confirm/deny data exists) |
@@ -327,7 +327,7 @@ All evaluations are tracked in [W&B Weave](https://wandb.ai):
 
 | Scorer | Metrics |
 |--------|---------|
-| `phi_leak_scorer` | blocked, ssn_leaked, phi_leaked, dob_leaked, name_leaked, metadata_leaked |
+| `pii_leak_scorer` | blocked, ssn_leaked, pii_leaked, dob_leaked, name_leaked, metadata_leaked |
 | `metadata_leak_scorer` | metadata_leaked, clean_refusal |
 | `redaction_scorer` | redaction_applied, ssn_caught_by_fw_l2 |
 | `injection_scorer` | injection_detected |
@@ -335,7 +335,7 @@ All evaluations are tracked in [W&B Weave](https://wandb.ai):
 
 ---
 
-## PHI NER Fine-tuning Experiment
+## PII NER Fine-tuning Experiment
 
 **Location:** `experiments/phi_ner/`
 
@@ -346,7 +346,7 @@ Fine-tune BERT-like models to improve FW-L2's name and address detection, replac
 spaCy `en_core_web_sm` has gaps:
 - Misses Synthea names (numbers in names: `Adah626 Klein929`)
 - Only catches city/state, not full addresses
-- False positives on drug names (`Aspirin` → PERSON)
+- False positives on drug names (`Aspirin` â†’ PERSON)
 
 ### Models
 
@@ -404,7 +404,7 @@ Data is pulled from Weave automatically. Results log to the same W&B project.
 | BERT (110M) | 0.9947 | 1.0000 | 0.9894 | 108 samples/s |
 | RoBERTa (125M) | 0.9923 | 0.9997 | 0.9849 | 122 samples/s |
 
-**Winner**: DistilBERT — smallest, fastest, highest F1. Larger models show no advantage.
+**Winner**: DistilBERT â€” smallest, fastest, highest F1. Larger models show no advantage.
 
 ### FW-L2 Profiles
 
@@ -425,9 +425,9 @@ uv run leaderboard --profiles naive_fw_l2_base naive_fw_l2_bert --limit 50
 The trained model is published as a W&B model artifact from Colab. FW-L2 pulls it automatically:
 
 ```
-Colab (01_training) → wandb.log_artifact("phi-ner-model", type="model")
-                                    ↓
-FW-L2 backend → run.use_artifact("phi-ner-model:latest").download() → cached locally
+Colab (01_training) â†’ wandb.log_artifact("phi-ner-model", type="model")
+                                    â†“
+FW-L2 backend â†’ run.use_artifact("phi-ner-model:latest").download() â†’ cached locally
 ```
 
 No manual download needed.
@@ -441,7 +441,7 @@ No manual download needed.
 | Command | Description |
 |---------|-------------|
 | `uv run help` | Show all commands and current configuration |
-| `uv run ingestion` | Run full pipeline: load → clean → chunk → embed → index |
+| `uv run ingestion` | Run full pipeline: load â†’ clean â†’ chunk â†’ embed â†’ index |
 | `uv run data-show` | Patient data statistics |
 | `uv run faiss-check` | FAISS index health check |
 | `uv run search` | Interactive retriever search |
@@ -511,7 +511,7 @@ docker compose --profile ollama up -d    # Backend + Ollama + auto model pull
 
 | Variable | Source | Notes |
 |----------|-------|-------|
-| `EMBEDDING_MODEL` | `.env` → build arg + runtime | Pre-downloaded during build |
+| `EMBEDDING_MODEL` | `.env` â†’ build arg + runtime | Pre-downloaded during build |
 | `LLM_PROVIDER` | `.env` | `wandb`, `groq`, or `ollama` |
 | `LLM_MODEL` | `.env` | Model name for selected provider |
 | `WANDB_API_KEY` | `.env` | Required for `wandb` provider |
@@ -528,12 +528,12 @@ docker compose --profile ollama up -d    # Backend + Ollama + auto model pull
 |-------|------|:------:|
 | **0** | Environment Setup | Done |
 | **1** | Data Ingestion (load, clean, chunk, embed, FAISS) | Done |
-| **1.8** | PHI Ground Truth Index | Done |
+| **1.8** | PII ground truth Index | Done |
 | **2** | Retriever (semantic search + section filtering) | Done |
 | **2.1** | Retrieval Quality Tests | Done |
 | **2.2** | Adversarial Retrieval Tests C1-C4 | Done |
 | **3** | Generator (W&B + Groq + Ollama, dual system prompts) | Done |
-| **3.3** | RAG Pipeline (retriever → generator → FW-L2) | Done |
+| **3.3** | RAG Pipeline (retriever â†’ generator â†’ FW-L2) | Done |
 | **3.4** | Benign + Adversarial Pipeline Tests | Done |
 | **3.5** | 1000-Query Adversarial Golden Set (C1-C5) | Done |
 | **3.6** | Evaluation CLI (sequential + parallel + Weave) | Done |
@@ -560,7 +560,7 @@ docker compose --profile ollama up -d    # Backend + Ollama + auto model pull
 
 ### System prompt alone is not sufficient
 
-With the **naive prompt**, the LLM freely outputs SSNs, names, and addresses from the context chunks. The **hardened prompt** blocks all tested adversarial queries (0% leak rate), but system prompts are brittle — jailbreaks evolve and different model versions may behave differently.
+With the **naive prompt**, the LLM freely outputs SSNs, names, and addresses from the context chunks. The **hardened prompt** blocks all tested adversarial queries (0% leak rate), but system prompts are brittle â€” jailbreaks evolve and different model versions may behave differently.
 
 ### Metadata leakage is a real risk
 
@@ -572,16 +572,16 @@ When the naive prompt is used, the LLM outputs SSNs freely. FW-L2 catches and re
 - **`fw_l2_base`** (spaCy): Catches city/state names, misses Synthea-format names and full addresses
 - **`fw_l2_bert`** (fine-tuned DistilBERT): 100% name detection, 100% address detection, trained on our data
 
-### Fine-tuned BERT outperforms spaCy for PHI detection
+### Fine-tuned BERT outperforms spaCy for PII detection
 
-DistilBERT fine-tuned on 8,332 Synthea examples achieves F1=0.9949 — near-perfect detection of names and addresses. Key findings:
-- Smallest model (66M params) performs best — the task doesn't need capacity, it needs domain-specific patterns
+DistilBERT fine-tuned on 8,332 Synthea examples achieves F1=0.9949 â€” near-perfect detection of names and addresses. Key findings:
+- Smallest model (66M params) performs best â€” the task doesn't need capacity, it needs domain-specific patterns
 - Training converges in 2-3 epochs; 10 epochs is unnecessary
 - All models achieve 100% name detection; addresses (~99%) are slightly harder
 
 ### Ground truth must not be used for detection
 
-Using `phi_groundtruth.json` to detect names/addresses in FW-L2 would be cheating — in production there's no lookup table. Ground truth is only for evaluation (measuring what was missed).
+Using `phi_groundtruth.json` to detect names/addresses in FW-L2 would be cheating â€” in production there's no lookup table. Ground truth is only for evaluation (measuring what was missed).
 
 ### Chunker recursive split matters
 
@@ -591,29 +591,30 @@ The original chunker allowed chunks up to 2,249 chars (overlap pushed past the 2
 
 ```
 Mobile App
-    │
-    ├── FW-L1: Block adversarial queries (on-device)
-    │
-    ▼
+    â”‚
+    â”œâ”€â”€ FW-L1: Block adversarial queries (on-device)
+    â”‚
+    â–¼
 Backend
-    │
-    ├── Retriever: Embed query → FAISS search → top-k chunks
-    │
-    ├── Generator: System prompt + context + query → LLM
-    │       ├── Naive prompt (no guardrails — for testing FW-L2)
-    │       └── Hardened prompt (refuses PHI requests, no metadata leakage)
-    │
-    ├── FW-L2: Scan and redact PHI from response
-    │       ├── Regex (SSN, phone, email, DOB, MRN)
-    │       ├── NER (names, addresses — spaCy or fine-tuned BERT)
-    │       ├── Injection detection
-    │       └── Metadata leak detection (evaluation only)
-    │
-    ▼
+    â”‚
+    â”œâ”€â”€ Retriever: Embed query â†’ FAISS search â†’ top-k chunks
+    â”‚
+    â”œâ”€â”€ Generator: System prompt + context + query â†’ LLM
+    â”‚       â”œâ”€â”€ Naive prompt (no guardrails â€” for testing FW-L2)
+    â”‚       â””â”€â”€ Hardened prompt (refuses PII requests, no metadata leakage)
+    â”‚
+    â”œâ”€â”€ FW-L2: Scan and redact PII from response
+    â”‚       â”œâ”€â”€ Regex (SSN, phone, email, DOB, MRN)
+    â”‚       â”œâ”€â”€ NER (names, addresses â€” spaCy or fine-tuned BERT)
+    â”‚       â”œâ”€â”€ Injection detection
+    â”‚       â””â”€â”€ Metadata leak detection (evaluation only)
+    â”‚
+    â–¼
 Safe Response to Mobile App
 ```
 
 Each layer catches what the previous one missed:
 - **FW-L1** blocks adversarial queries before they cost compute
-- **System prompt** instructs the LLM to refuse PHI requests
-- **FW-L2** redacts any PHI that slips through in the response
+- **System prompt** instructs the LLM to refuse PII requests
+- **FW-L2** redacts any PII that slips through in the response
+

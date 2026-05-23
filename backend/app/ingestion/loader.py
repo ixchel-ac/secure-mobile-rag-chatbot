@@ -20,17 +20,17 @@ class PatientRecord:
     patient_name: str
     source_file: str
     raw_text: str
-    phi_entities: dict = field(default_factory=dict)
+    pii_entities: dict = field(default_factory=dict)
 
     def __str__(self) -> str:
         """Human-readable summary."""
-        phi = self.phi_entities
+        pii = self.pii_entities
         lines = [
             f"PatientRecord: {self.patient_name}",
             f"  ID:     {self.patient_id}",
             f"  File:   {self.source_file}",
-            f"  DOB:    {phi.get('dob', 'N/A')}",
-            f"  SSN:    {phi.get('ssn', 'N/A')}",
+            f"  DOB:    {pii.get('dob', 'N/A')}",
+            f"  SSN:    {pii.get('ssn', 'N/A')}",
             f"  Text:   {len(self.raw_text)} chars", #{self.raw_text}", 
         ]
         return "\n".join(lines)
@@ -122,7 +122,7 @@ def load_all(
         csv_dir: Path to data/synthea/csv/
 
     Returns:
-        List of PatientRecord objects with raw text and PHI metadata.
+        List of PatientRecord objects with raw text and PII metadata.
     """
     text_dir = Path(text_dir)
     csv_dir = Path(csv_dir)
@@ -152,7 +152,7 @@ def load_all(
                 patient_name=patient_name,
                 source_file=filename,
                 raw_text=raw_text,
-                phi_entities={
+                pii_entities={
                     "ssn": patient_info["ssn"],
                     "dob": patient_info["dob"],
                     "name": patient_info["name"],
@@ -168,7 +168,7 @@ def load_all(
                 patient_name=patient_name,
                 source_file=filename,
                 raw_text=raw_text,
-                phi_entities={},
+                pii_entities={},
             )
 
         records.append(record)
@@ -176,11 +176,11 @@ def load_all(
     print(f"[loader] Loaded {len(records)} patient files ({matched} matched CSV, {unmatched} unmatched)")
     return records
 
-def build_phi_groundtruth(csv_path: str | Path, output_path: str | Path) -> dict[str, dict]:
-    """Build PHI ground-truth index from patients.csv.
+def build_pii_groundtruth(csv_path: str | Path, output_path: str | Path) -> dict[str, dict]:
+    """Build PII ground-truth index from patients.csv.
 
     Phase 1, Step 1.8:
-    Creates a JSON file mapping patient_id to PHI entities:
+    Creates a JSON file mapping patient_id to PII entities:
         {patient_id: {ssn, name, full_name, dob, address}}
 
     Args:
@@ -195,7 +195,7 @@ def build_phi_groundtruth(csv_path: str | Path, output_path: str | Path) -> dict
 
     id_lookup = load_patients_csv(csv_path)
 
-    # Build ground truth with only PHI fields
+    # Build ground truth with only PII fields
     groundtruth: dict[str, dict] = {}
     for patient_id, info in id_lookup.items():
         groundtruth[patient_id] = {
@@ -211,7 +211,7 @@ def build_phi_groundtruth(csv_path: str | Path, output_path: str | Path) -> dict
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(groundtruth, f, indent=2, ensure_ascii=False)
 
-    print(f"[loader] Saved PHI ground truth: {len(groundtruth)} patients -> {output_path}")
+    print(f"[loader] Saved PII ground truth: {len(groundtruth)} patients -> {output_path}")
     return groundtruth
 
 if __name__ == "__main__":
