@@ -19,14 +19,19 @@ PATTERNS = {
     "SSN": re.compile(r"\b\d{3}-\d{2}-\d{4}\b"),
     "PHONE": re.compile(r"\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b"),
     "EMAIL": re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b"),
-    "DOB": re.compile(r"\b(?:19|20)\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])\b"),
+    # DOB: only match dates in birth-related context (avoids redacting encounter/medication dates)
+    "DOB": re.compile(
+        r"(?:birth\s*(?:date|day)|DOB|date\s*of\s*birth|born\s*(?:on)?)\s*[:=\-]?\s*"
+        r"(?:19|20)\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])\b",
+        re.IGNORECASE,
+    ),
     "MRN": re.compile(r"\b[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\b", re.IGNORECASE),
 }
 
 
 @dataclass
 class Detection:
-    """A single PHI detection in the response text."""
+    """A single PII detection in the response text."""
 
     entity_type: str       # SSN, PHONE, EMAIL, DOB, MRN, NAME, INJECTION
     value: str             # The matched text
@@ -40,13 +45,18 @@ class FWL2Result:
     """Result of FW-L2 validation."""
 
     original_text: str
-    sanitized_text: str
+    sanitized_text: str              # Specific tags: [SSN], [NAME], [DOB] (for debugging)
+    sanitized_text_generic: str = "" # Generic tags: [REDACTED] (for user-facing output)
     detections: list[Detection] = field(default_factory=list)
     injection_detected: bool = False
 
     @property
-    def has_phi(self) -> bool:
+    def has_pii(self) -> bool:
         return len(self.detections) > 0
+
+    @property
+    def has_phi(self) -> bool:
+        return self.has_pii
 
     @property
     def detection_summary(self) -> dict[str, int]:
@@ -58,7 +68,7 @@ class FWL2Result:
 
     def __str__(self) -> str:
         if not self.detections:
-            return "FWL2Result: CLEAN (no PHI detected)"
+            return "FWL2Result: CLEAN (no PII detected)"
         types = ", ".join(f"{k}: {v}" for k, v in self.detection_summary.items())
         return f"FWL2Result: {len(self.detections)} detections ({types})"
 
@@ -151,10 +161,15 @@ class FWL2:
 
         return detections
 
-    def redact(self, text: str, detections: list[Detection]) -> str:
-        """Replace detected PHI with redaction tokens.
+    def redact(self, text: str, detections: list[Detection], generic: bool = False) -> str:
+        """Replace detected PII with redaction tokens.
 
-        Replaces each detection with [ENTITY_TYPE], e.g., [SSN], [NAME].
+        Args:
+            text: The text to redact.
+            detections: List of PII detections.
+            generic: If True, use [REDACTED] for all types. If False, use
+                     type-specific tags like [SSN], [NAME], [DOB].
+
         Processes detections in reverse order to preserve positions.
         """
         # Deduplicate overlapping detections, keeping the longest match
@@ -165,7 +180,7 @@ class FWL2:
 
         redacted = text
         for d in sorted_detections:
-            token = f"[{d.entity_type}]"
+            token = "[REDACTED]" if generic else f"[{d.entity_type}]"
             redacted = redacted[:d.start] + token + redacted[d.end:]
 
         return redacted
@@ -216,12 +231,14 @@ class FWL2:
         classifier_detections = self.classifier.classify(text)
         all_detections.extend(classifier_detections)
 
-        # Redact
-        sanitized = self.redact(text, all_detections)
+        # Redact — produce both specific and generic versions
+        sanitized = self.redact(text, all_detections, generic=False)
+        sanitized_generic = self.redact(text, all_detections, generic=True)
 
         return FWL2Result(
             original_text=text,
             sanitized_text=sanitized,
+            sanitized_text_generic=sanitized_generic,
             detections=all_detections,
             injection_detected=len(injection_detections) > 0,
         )

@@ -27,3 +27,7 @@ INDEX_DIR = os.getenv("INDEX_DIR", "./index/")
 TOP_K = int(os.getenv("TOP_K", "5"))
 
 OLLAMA_BASE_URL = f"http://{OLLAMA_HOST}:{OLLAMA_PORT}"
+
+RERANKER_MODEL = os.getenv("RERANKER_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2")
+RERANKER_TOP_K = int(os.getenv("RERANKER_TOP_K", "10"))
+LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "400"))

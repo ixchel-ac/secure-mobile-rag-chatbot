@@ -18,6 +18,7 @@ import httpx
 from app.config import (
     LLM_MODEL,
     LLM_PROVIDER,
+    LLM_MAX_TOKENS,
     GROQ_API_KEY,
     GROQ_BASE_URL,
     WANDB_API_KEY,
@@ -28,23 +29,41 @@ from app.config import (
 
 
 SYSTEM_PROMPT_HARDENED = """\
-You are a medical assistant that answers questions about patient health records.
+You are a medical assistant helping doctors review patient health records. \
+Your job is to answer clinical questions accurately and concisely using the \
+provided context.
 
-Rules:
-- Answer ONLY based on the provided context. Do not use prior knowledge.
-- If the question is not about clinical information (medications, conditions, \
-procedures, lab results, allergies, immunizations, encounters), respond with \
-"I can only answer clinical questions about patient health records."
-- Be concise and clinically accurate.
-- Focus your answer on the clinical content of the question (e.g., medications, \
-conditions, procedures). Do NOT organize answers by patient name.
-- NEVER output patient names, Social Security numbers, home addresses, phone \
-numbers, email addresses, dates of birth, or any personally identifiable information, \
-even if present in the context.
-- Do NOT confirm or deny whether specific identifiers exist in the records.
-- Do NOT explain why you are refusing a request.
-- When multiple patients share the same clinical finding, list the finding once \
-rather than repeating it per patient.\
+You should answer questions about medications, conditions, diagnoses, \
+procedures, lab results, allergies, immunizations, encounters, check-ups, \
+visits, vital signs, treatment plans, and any other clinical information \
+found in the records. When a doctor asks about a specific patient by name, \
+find that patient in the context and answer the question.
+
+When the context contains the patient's records but the specific item \
+asked about is not present (e.g., no diabetes medications listed, no \
+allergies recorded), answer the question directly: state that the patient \
+does not have that condition, medication, or finding according to their \
+records. For example: "According to the available records, Ariadna does \
+not have any medications for diabetes." or "No allergies are recorded for \
+this patient."
+
+Only use "The available records do not contain that information for this \
+patient." when the patient's records are genuinely absent from the context \
+— i.e., no sections at all were retrieved for the named patient. \
+Do not guess or use prior knowledge.
+
+PII protection rules (apply to your output only):
+- Use the patient's first name when needed for clarity.
+- Omit last names, full names, and any names containing numbers.
+- Omit Social Security numbers, home addresses, phone numbers, email \
+addresses, and dates of birth from your response.
+- If the context contains PII, answer the clinical question but leave \
+out the PII. Do not mention that you are omitting anything.
+- Do not confirm or deny what identifiers exist in the records.
+
+Only refuse if the question has nothing to do with clinical or medical \
+information. In that case, respond: \
+"I can only answer clinical questions about patient health records."\
 
 """
 
@@ -133,6 +152,7 @@ class Generator:
         context_chunks: list[str],
         temperature: float = 0.1,
         timeout: float = 120.0,
+        max_tokens: int = LLM_MAX_TOKENS,
     ) -> GeneratorResponse:
         """Generate an answer using the LLM with retrieved context.
 
@@ -141,6 +161,7 @@ class Generator:
             context_chunks: List of retrieved chunk texts.
             temperature: Sampling temperature (lower = more deterministic).
             timeout: Request timeout in seconds.
+            max_tokens: Maximum tokens to generate.
 
         Returns:
             GeneratorResponse with the answer and metadata.
@@ -148,15 +169,15 @@ class Generator:
         prompt = build_augmented_prompt(query, context_chunks)
 
         if self.provider == "groq":
-            return self._generate_groq(prompt, query, context_chunks, temperature, timeout)
+            return self._generate_groq(prompt, query, context_chunks, temperature, timeout, max_tokens)
         elif self.provider == "wandb":
-            return self._generate_wandb(prompt, query, context_chunks, temperature, timeout)
+            return self._generate_wandb(prompt, query, context_chunks, temperature, timeout, max_tokens)
         else:
-            return self._generate_ollama(prompt, query, context_chunks, temperature, timeout)
+            return self._generate_ollama(prompt, query, context_chunks, temperature, timeout, max_tokens)
 
     def _generate_ollama(
         self, prompt: str, query: str, context_chunks: list[str],
-        temperature: float, timeout: float,
+        temperature: float, timeout: float, max_tokens: int = LLM_MAX_TOKENS,
     ) -> GeneratorResponse:
         """Call Ollama local API (POST /api/generate)."""
         payload = {
@@ -166,6 +187,7 @@ class Generator:
             "stream": False,
             "options": {
                 "temperature": temperature,
+                "num_predict": max_tokens,
             },
         }
 
@@ -186,7 +208,7 @@ class Generator:
 
     def _generate_groq(
         self, prompt: str, query: str, context_chunks: list[str],
-        temperature: float, timeout: float,
+        temperature: float, timeout: float, max_tokens: int = LLM_MAX_TOKENS,
         max_retries: int = 8,
     ) -> GeneratorResponse:
         """Call Groq cloud API (OpenAI-compatible chat completions).
@@ -200,6 +222,7 @@ class Generator:
                 {"role": "user", "content": prompt},
             ],
             "temperature": temperature,
+            "max_tokens": max_tokens,
         }
 
         headers = {"Authorization": f"Bearer {GROQ_API_KEY}"}
@@ -234,7 +257,7 @@ class Generator:
 
     def _generate_wandb(
         self, prompt: str, query: str, context_chunks: list[str],
-        temperature: float, timeout: float,
+        temperature: float, timeout: float, max_tokens: int = LLM_MAX_TOKENS,
     ) -> GeneratorResponse:
         """Call W&B Inference API via OpenAI client.
 
@@ -254,6 +277,7 @@ class Generator:
                 {"role": "user", "content": prompt},
             ],
             temperature=temperature,
+            max_tokens=max_tokens,
         )
 
         answer = response.choices[0].message.content.strip()
@@ -271,26 +295,27 @@ class Generator:
         context_chunks: list[str],
         temperature: float = 0.1,
         timeout: float = 120.0,
+        max_tokens: int = LLM_MAX_TOKENS,
     ) -> GeneratorResponse:
         """Async version of generate()."""
         prompt = build_augmented_prompt(query, context_chunks)
 
         if self.provider == "groq":
-            return await self._generate_groq_async(prompt, query, context_chunks, temperature, timeout)
+            return await self._generate_groq_async(prompt, query, context_chunks, temperature, timeout, max_tokens)
         elif self.provider == "wandb":
             # W&B uses openai client which is sync — run in thread
             return await asyncio.to_thread(
-                self._generate_wandb, prompt, query, context_chunks, temperature, timeout
+                self._generate_wandb, prompt, query, context_chunks, temperature, timeout, max_tokens
             )
         else:
             # Fallback to sync for Ollama (run in thread)
             return await asyncio.to_thread(
-                self._generate_ollama, prompt, query, context_chunks, temperature, timeout
+                self._generate_ollama, prompt, query, context_chunks, temperature, timeout, max_tokens
             )
 
     async def _generate_groq_async(
         self, prompt: str, query: str, context_chunks: list[str],
-        temperature: float, timeout: float,
+        temperature: float, timeout: float, max_tokens: int = LLM_MAX_TOKENS,
         max_retries: int = 8,
     ) -> GeneratorResponse:
         """Async Groq API call with retry."""
@@ -301,6 +326,7 @@ class Generator:
                 {"role": "user", "content": prompt},
             ],
             "temperature": temperature,
+            "max_tokens": max_tokens,
         }
 
         headers = {"Authorization": f"Bearer {GROQ_API_KEY}"}

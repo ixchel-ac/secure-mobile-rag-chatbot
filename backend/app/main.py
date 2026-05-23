@@ -1,6 +1,5 @@
 """FastAPI entry point for the mobile-rag-firewall backend."""
 
-import asyncio
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -14,10 +13,11 @@ from app.routes import health, query, ingest, test
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Load FAISS index, FW-L2, and RAG pipeline on startup."""
+    import threading
     from app.firewall.fw_l2 import FWL2
     from app.rag.pipeline import RAGPipeline
 
-    fw_l2 = await asyncio.to_thread(FWL2, ner_backend="bert")
+    fw_l2 = FWL2(ner_backend="bert")
     app.state.fw_l2 = fw_l2
 
     index_path = Path(INDEX_DIR)
@@ -38,6 +38,10 @@ async def lifespan(app: FastAPI):
         app.state.pipeline = None
         print(f"[startup] No index found at {index_path}")
         print("[startup] Call POST /ingest to build the index")
+
+    # Cache for /test profile pipelines — built lazily on first use
+    app.state.test_pipelines: dict = {}
+    app.state.test_pipelines_lock = threading.Lock()
 
     yield
 

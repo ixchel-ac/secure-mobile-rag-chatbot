@@ -32,6 +32,7 @@ COMMAND_GROUPS = {
     "Golden Set Generation": {
         "generate-adversarial-queries":  "Generate the 1,000-query adversarial golden test set",
         "generate-benign-queries":       "Generate the 1,000-query benign golden test set",
+        "generate-compound-queries":     "Generate the 600-query compound (mixed) golden test set",
     },
     "Evaluation": {
         "evaluate":         "Run adversarial evaluation against the RAG pipeline",
@@ -241,6 +242,21 @@ def generate_benign_queries():
 
     project_root = Path(__file__).parent.parent.parent
     script = project_root / "data" / "golden_sets" / "generate_benign.py"
+
+    if not script.exists():
+        print(f"Error: Generator script not found at {script}")
+        sys.exit(1)
+
+    result = subprocess.run([sys.executable, str(script)], cwd=str(project_root))
+    sys.exit(result.returncode)
+
+
+def generate_compound_queries():
+    """Generate the 600-query compound golden test set."""
+    import subprocess
+
+    project_root = Path(__file__).parent.parent.parent
+    script = project_root / "data" / "golden_sets" / "generate_compound_queries.py"
 
     if not script.exists():
         print(f"Error: Generator script not found at {script}")
