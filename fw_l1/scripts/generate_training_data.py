@@ -1,14 +1,18 @@
-"""Combine adversarial + benign queries into train/val/test splits.
+"""Combine adversarial + benign + compound queries into train/val/test splits.
 
 Input:
     data/golden_sets/adversarial_queries.json  (1,000 queries, C1-C5)
     data/golden_sets/benign_queries.json        (1,000 queries, safe)
+    data/golden_sets/compound_queries.json      (600 queries, C1-C5, optional)
 
 Output:
-    fw_l1/data/train.json  (70%, ~1,400 examples)
-    fw_l1/data/val.json    (15%, ~300 examples)
-    fw_l1/data/test.json   (15%, ~300 examples)
+    fw_l1/data/train.json  (70%, ~1,666 examples when all 3 sources present)
+    fw_l1/data/val.json    (15%, ~357 examples)
+    fw_l1/data/test.json   (15%, ~357 examples)
     Published to Weave: fw-l1-train, fw-l1-val, fw-l1-test
+
+    Total with all 3 sources: ~2,380 examples
+    (1,000 adversarial + 1,000 benign + 380 compound after 80/10/10 split)
 
 Usage:
     cd fw_l1
@@ -30,6 +34,7 @@ load_dotenv(_project_root / ".env", override=True)
 SEED = 42
 ADVERSARIAL_PATH = _project_root / "data" / "golden_sets" / "adversarial_queries.json"
 BENIGN_PATH = _project_root / "data" / "golden_sets" / "benign_queries.json"
+COMPOUND_PATH = _project_root / "data" / "golden_sets" / "compound_queries.json"
 OUTPUT_DIR = Path(__file__).parent.parent / "data"
 
 LABEL_MAP = {"safe": 0, "C1": 1, "C2": 2, "C3": 3, "C4": 4, "C5": 5}
@@ -45,12 +50,13 @@ def load_queries(path: Path) -> list[dict]:
 def main():
     random.seed(SEED)
 
-    # Load both query sets
+    # Load adversarial queries (required)
     if not ADVERSARIAL_PATH.exists():
         print(f"Error: {ADVERSARIAL_PATH} not found")
         print("Run: cd backend && uv run generate-adversarial-queries")
         raise SystemExit(1)
 
+    # Load benign queries (required)
     if not BENIGN_PATH.exists():
         print(f"Error: {BENIGN_PATH} not found")
         print("Run: cd backend && uv run generate-benign-queries")
@@ -62,8 +68,21 @@ def main():
     print(f"[generate] Loaded {len(adversarial)} adversarial queries")
     print(f"[generate] Loaded {len(benign)} benign queries")
 
+    # Load compound queries (optional)
+    compound: list[dict] = []
+    if COMPOUND_PATH.exists():
+        compound = load_queries(COMPOUND_PATH)
+        print(f"[generate] Loaded {len(compound)} compound queries")
+    else:
+        print(
+            f"[generate] Warning: {COMPOUND_PATH} not found — "
+            "continuing without compound queries. "
+            "Run: uv run generate-compound-queries"
+        )
+
     # Create unified training format
     examples = []
+
     for q in adversarial + benign:
         category = q["category"]
         examples.append({
@@ -74,6 +93,26 @@ def main():
             "expected_action": q["expected_action"],
             "subcategory": q.get("subcategory", ""),
             "difficulty": q.get("difficulty", ""),
+            "compound": False,
+            "blend_type": "",
+            "benign_part": "",
+            "adversarial_part": "",
+        })
+
+    for q in compound:
+        category = q["category"]
+        examples.append({
+            "id": q["id"],
+            "text": q["query"],
+            "label": category,
+            "label_id": LABEL_MAP[category],
+            "expected_action": q["expected_action"],
+            "subcategory": q.get("subcategory", ""),
+            "difficulty": q.get("difficulty", ""),
+            "compound": q.get("compound", False),
+            "blend_type": q.get("blend_type", ""),
+            "benign_part": q.get("benign_part", ""),
+            "adversarial_part": q.get("adversarial_part", ""),
         })
 
     # Stratified split: 70% train, 15% val, 15% test

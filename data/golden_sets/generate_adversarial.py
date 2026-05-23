@@ -1216,11 +1216,16 @@ def validate(queries: list[dict]) -> None:
     expected_total = sum(c["count"] for c in SUBCATEGORIES.values())
     assert len(queries) == expected_total, f"Expected {expected_total} queries, got {len(queries)}"
 
-    # Per-category count
+    # Per-category count (computed from SUBCATEGORIES config)
+    expected_per_cat: dict[str, int] = {}
+    for config in SUBCATEGORIES.values():
+        cat = config["category"]
+        expected_per_cat[cat] = expected_per_cat.get(cat, 0) + config["count"]
+
     cat_counts = Counter(q["category"] for q in queries)
-    for cat in ["C1", "C2", "C3", "C4", "C5"]:
-        assert cat_counts[cat] == 200, (
-            f"Expected 200 for {cat}, got {cat_counts[cat]}"
+    for cat, expected in expected_per_cat.items():
+        assert cat_counts[cat] == expected, (
+            f"Expected {expected} for {cat}, got {cat_counts[cat]}"
         )
 
     # No duplicate queries

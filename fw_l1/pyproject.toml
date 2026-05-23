@@ -21,6 +21,7 @@ l1-generate = "scripts.cli:generate"
 l1-train = "scripts.cli:train"
 l1-evaluate = "scripts.cli:evaluate"
 l1-export = "scripts.cli:export"
+l1-download = "scripts.cli:download"
 l1-help = "scripts.cli:help"
 
 [build-system]

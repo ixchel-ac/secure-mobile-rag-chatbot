@@ -16,3 +16,4 @@ def fix_notebook(path):
         print(f"No fix needed: {path}")
 
 fix_notebook("01_training.ipynb")
+fix_notebook("02_fine_tuning_v2.ipynb")

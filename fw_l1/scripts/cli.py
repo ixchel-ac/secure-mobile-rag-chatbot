@@ -1,8 +1,9 @@
 """CLI entry points for FW-L1 experiment scripts.
 
-Golden set generation (adversarial + benign) is handled by the backend CLI:
+Golden set generation (adversarial + benign + compound) is handled by the backend CLI:
     cd backend && uv run generate-adversarial-queries
     cd backend && uv run generate-benign-queries
+    cd backend && uv run generate-compound-queries
 
 Usage (from fw_l1/):
     uv run l1-help                           # Show all commands
@@ -21,7 +22,7 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent
 
 COMMANDS = {
     "Data": {
-        "l1-generate":        "Combine adversarial + benign → train/val/test + Weave",
+        "l1-generate":        "Combine adversarial + benign + compound → train/val/test + Weave",
     },
     "Training": {
         "l1-train":           "Fine-tune a model (--model mobilebert|distilbert|tinybert|all)",
@@ -29,6 +30,7 @@ COMMANDS = {
     },
     "Deployment": {
         "l1-export":          "Export to ONNX + INT8 quantization → fw_l1/models/",
+        "l1-download":        "Download latest ONNX model from W&B (--version, --android-assets)",
     },
     "General": {
         "l1-help":            "Show this help message",
@@ -52,6 +54,7 @@ def help():
     print("  Golden set generation (run from backend/):")
     print("    uv run generate-adversarial-queries")
     print("    uv run generate-benign-queries")
+    print("    uv run generate-compound-queries")
     print()
     print("  Models available:")
     print("    mobilebert           MobileBERT (~25M params, deployment target)")
@@ -89,4 +92,10 @@ def evaluate():
 def export():
     """Export best model to ONNX + INT8 and copy to fw_l1/models/."""
     from scripts.export_onnx import main
+    main()
+
+
+def download():
+    """Download latest FW-L1 ONNX model from W&B."""
+    from scripts.download_model import main
     main()
