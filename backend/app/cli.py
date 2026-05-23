@@ -442,7 +442,7 @@ def leaderboard():
 
     Examples:
         uv run leaderboard --mode local --profiles naive hardened_fw_l2_base
-        uv run leaderboard --mode remote --remote-url https://mobile-rag-firewall-956461831254.us-west2.run.app
+        uv run leaderboard --mode remote --remote-url https://mobile-rag-firewall-938910481811.us-west2.run.app
     """
     import argparse
     import asyncio
@@ -450,7 +450,7 @@ def leaderboard():
     from app.config import WANDB_PROJECT
     from app.evaluation.leaderboard import run_and_publish
 
-    CLOUD_RUN_URL = "https://mobile-rag-firewall-956461831254.us-west2.run.app"
+    CLOUD_RUN_URL = "https://mobile-rag-firewall-938910481811.us-west2.run.app"
 
     parser = argparse.ArgumentParser(description="Run leaderboard evaluation")
     parser.add_argument("--mode", choices=["local", "remote"], default="local",

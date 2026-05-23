@@ -67,13 +67,14 @@ RUN uv run python -c "from sentence_transformers import SentenceTransformer; Sen
 COPY app/ ./app/
 
 # ---- Stage 7: Expose port ----
-EXPOSE 8000
+EXPOSE 8080
 
 # ---- Stage 8: Health check ----
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"
 
 # ---- Stage 9: Start command ----
 # Use uv run to execute within the managed environment.
+# PORT is injected by Cloud Run (default 8080); falls back to 8080 locally.
 # Reference: https://www.uvicorn.org/
-CMD ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "uv run uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}"]
