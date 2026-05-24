@@ -33,6 +33,21 @@ SECTION_RE = re.compile(
     re.MULTILINE,
 )
 
+# Natural language descriptions for each section (prepended to chunk text for better embeddings)
+SECTION_DESCRIPTIONS = {
+    "ALLERGIES": "Patient allergies and allergic reactions.",
+    "MEDICATIONS": "Patient medications, prescriptions, and drugs currently or previously taken.",
+    "CONDITIONS": "Patient medical conditions, diagnoses, and health problems.",
+    "CARE PLANS": "Patient care plans, treatment plans, and therapy regimens.",
+    "REPORTS": "Patient lab reports, test results, and clinical findings.",
+    "OBSERVATIONS": "Patient vital signs, measurements, body weight, blood pressure, and lab values.",
+    "PROCEDURES": "Patient medical procedures, surgeries, and clinical interventions.",
+    "IMMUNIZATIONS": "Patient vaccines, immunizations, and vaccination history.",
+    "ENCOUNTERS": "Patient visits, check-ups, appointments, and encounters with healthcare providers.",
+    "IMAGING STUDIES": "Patient imaging studies, X-rays, MRIs, CT scans, and radiology results.",
+    "DEMOGRAPHICS": "Patient demographic information.",
+}
+
 # Approximate chars-per-token ratio for English medical text
 CHARS_PER_TOKEN = 4
 MAX_CHUNK_TOKENS = 512
@@ -172,11 +187,19 @@ def chunk_patient_record(
                 pii_block += f"SSN:                 {pii_entities['ssn']}\n"
             if pii_entities.get("address"):
                 pii_block += f"Address:             {pii_entities['address']}\n"
+            if pii_entities.get("email"):
+                pii_block += f"Email:               {pii_entities['email']}\n"
+            if pii_entities.get("phone"):
+                pii_block += f"Phone:               {pii_entities['phone']}\n"
             if pii_block:
                 content = pii_block + content
 
-        # Prepend section context to the text for better embeddings
-        section_text = f"{patient_name} -- {section_name}: {content}"
+        # Prepend section context (with description) to the text for better embeddings
+        description = SECTION_DESCRIPTIONS.get(section_name, "")
+        if description:
+            section_text = f"{patient_name} -- {section_name}: {description}\n{content}"
+        else:
+            section_text = f"{patient_name} -- {section_name}: {content}"
 
         # Split if too long
         text_pieces = recursive_split(section_text)
@@ -231,6 +254,3 @@ if __name__ == "__main__":
 
     print("--- Chunk 2 (first clinical section) ---")
     print(chunks[1])
-
-    for chunk in chunks:
-        print(chunk)

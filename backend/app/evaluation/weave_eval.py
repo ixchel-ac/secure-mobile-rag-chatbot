@@ -250,7 +250,7 @@ class RemoteRAGModel(weave.Model):
         response = httpx.post(
             f"{self.remote_url}/test",
             json={"query": query, "profile": self.profile, "top_k": 5},
-            timeout=120.0,
+            timeout=300.0,
         )
         latency = time.time() - start
 

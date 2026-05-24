@@ -12,11 +12,9 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-""" defines a datacontainer for patient records loaded from synthea """
-
 @dataclass
 class PatientRecord:
-    """A raw patient record"""
+    """A raw patient record loaded from Synthea output."""
     patient_id: str
     patient_name: str
     source_file: str
@@ -106,6 +104,7 @@ def load_patients_csv(csv_path: Path) -> dict[str, dict]:
 
     return lookup_by_id
 
+
 def extract_uuid_from_filename(filename: str) -> str:
     """Extract the UUID from a Synthea text filename.
 
@@ -120,6 +119,7 @@ def extract_uuid_from_filename(filename: str) -> str:
     match = re.search(uuid_pattern, filename, re.IGNORECASE)
     return match.group(1) if match else ""
 
+
 def parse_patient_name_from_header(text: str) -> str:
     """Extract the patient name from the first line of a Synthea text file.
 
@@ -132,7 +132,8 @@ def parse_patient_name_from_header(text: str) -> str:
     if lines:
         return lines[0].strip()
     return ""
-    
+
+
 def load_text_files(text_dir: Path) -> list[tuple[str, str]]:
     """Load all .txt files from the Synthea text output directory.
 
@@ -146,6 +147,7 @@ def load_text_files(text_dir: Path) -> list[tuple[str, str]]:
         results.append((txt_file.name, raw_text))
 
     return results
+
 
 def load_all(
     text_dir: str | Path,
@@ -216,12 +218,13 @@ def load_all(
     print(f"[loader] Loaded {len(records)} patient files ({matched} matched CSV, {unmatched} unmatched)")
     return records
 
+
 def build_pii_groundtruth(csv_path: str | Path, output_path: str | Path) -> dict[str, dict]:
     """Build PII ground-truth index from patients.csv.
 
     Phase 1, Step 1.8:
     Creates a JSON file mapping patient_id to PII entities:
-        {patient_id: {ssn, name, full_name, dob, address}}
+        {patient_id: {ssn, name, full_name, dob, address, email, phone}}
 
     Args:
         csv_path: Path to patients.csv

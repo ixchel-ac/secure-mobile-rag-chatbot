@@ -284,6 +284,14 @@ def publish_leaderboard(evaluations: dict[str, weave.Evaluation]) -> str:
             summary_metric_path="under_5s.mean",
         ))
 
+        # Under 10s rate (higher is better)
+        columns.append(leaderboard.LeaderboardColumn(
+            evaluation_object_ref=eval_uri,
+            scorer_name="latency_scorer",
+            should_minimize=False,
+            summary_metric_path="under_10s.mean",
+        ))
+
     spec = leaderboard.Leaderboard(
         name="PII Protection Leaderboard",
         description=(
