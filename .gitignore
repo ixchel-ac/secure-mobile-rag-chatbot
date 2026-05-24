@@ -65,3 +65,6 @@ backend/app/firewall/__pycache__/
 backend/app/__pycache__/
 backend/app/rag/__pycache__/
 backend/app/evaluation/__pycache__/
+android-app/FW_L1_TEST_RUNBOOK_WINDOWS.docx
+index/faiss.index
+index/metadata.jsonl
