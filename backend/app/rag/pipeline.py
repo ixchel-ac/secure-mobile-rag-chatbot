@@ -3,7 +3,7 @@
 Phase 3 & 4:
 - Chain retriever -> generator -> FW-L2 validation
 - Takes a user query, retrieves context, generates answer
-- Optionally validates and redacts PHI from the response (FW-L2)
+- Optionally validates and redacts PII from the response (FW-L2)
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ class RAGResponse:
 
     @property
     def was_redacted(self) -> bool:
-        return self.fw_l2_result is not None and self.fw_l2_result.has_phi
+        return self.fw_l2_result is not None and self.fw_l2_result.has_pii
 
     @property
     def injection_detected(self) -> bool:
@@ -40,7 +40,7 @@ class RAGResponse:
         sections = [c.metadata.get("section", "N/A") for c in self.chunks]
         patients = set(c.metadata.get("patient_name", "N/A") for c in self.chunks)
         redacted_info = ""
-        if self.fw_l2_result and self.fw_l2_result.has_phi:
+        if self.fw_l2_result and self.fw_l2_result.has_pii:
             redacted_info = f"\n  Redacted: {self.fw_l2_result.detection_summary}"
         return (
             f"RAGResponse (model={self.model})\n"
@@ -109,7 +109,7 @@ class RAGPipeline:
         answer = raw_answer
         if self.fw_l2:
             fw_l2_result = self.fw_l2.validate(raw_answer)
-            answer = fw_l2_result.sanitized_text
+            answer = fw_l2_result.sanitized_text_generic
 
         return RAGResponse(
             query=query,
@@ -127,8 +127,15 @@ class RAGPipeline:
         sections: list[str] | None = None,
         temperature: float = 0.1,
     ) -> RAGResponse:
-        """Async version of query(). Retrieval is sync, generation is async."""
-        chunks = self.retriever.retrieve(query, top_k=top_k, sections=sections)
+        """Async version of query(). CPU-bound steps run in a thread pool."""
+        import asyncio
+
+        # Retrieval (embedding + FAISS + CrossEncoder reranking) is CPU-bound.
+        # Running it in a thread pool keeps the event loop free to accept other
+        # requests while this query waits for the reranker.
+        chunks = await asyncio.to_thread(
+            self.retriever.retrieve, query, top_k=top_k, sections=sections
+        )
         context_texts = [chunk.text for chunk in chunks]
 
         gen_response = await self.generator.generate_async(
@@ -139,12 +146,12 @@ class RAGPipeline:
 
         raw_answer = gen_response.answer
 
-        # FW-L2 validation (sync, fast — regex only)
+        # FW-L2 NER validation is also CPU-bound (BERT inference).
         fw_l2_result = None
         answer = raw_answer
         if self.fw_l2:
-            fw_l2_result = self.fw_l2.validate(raw_answer)
-            answer = fw_l2_result.sanitized_text
+            fw_l2_result = await asyncio.to_thread(self.fw_l2.validate, raw_answer)
+            answer = fw_l2_result.sanitized_text_generic
 
         return RAGResponse(
             query=query,

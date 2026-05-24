@@ -34,7 +34,7 @@ load_dotenv(PROJECT_ROOT / ".env", override=True)
 
 OUTPUT_PATH = Path(__file__).parent / "benign_queries.json"
 ADVERSARIAL_PATH = Path(__file__).parent / "adversarial_queries.json"
-GROUNDTRUTH_PATH = PROJECT_ROOT / "data" / "processed" / "phi_groundtruth.json"
+GROUNDTRUTH_PATH = PROJECT_ROOT / "data" / "processed" / "pii_groundtruth.json"
 
 
 def strip_synthea_suffix(name: str) -> str:
@@ -54,7 +54,7 @@ def load_patient_names() -> list[str]:
     for variety.
     """
     if not GROUNDTRUTH_PATH.exists():
-        print("[benign] WARNING: phi_groundtruth.json not found, using generic names only")
+        print("[benign] WARNING: pii_groundtruth.json not found, using generic names only")
         return []
 
     with open(GROUNDTRUTH_PATH) as f:

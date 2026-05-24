@@ -25,12 +25,12 @@ def _resolve_paths():
 COMMAND_GROUPS = {
     "Data & Indexing": {
         "ingestion":        "Run the full ingestion pipeline: load -> clean -> chunk -> embed -> index",
-        "data-show":        "Show statistics about the patient data (counts, sizes, PHI coverage)",
+        "data-show":        "Show statistics about the patient data (counts, sizes, PII coverage)",
         "faiss-check":      "Show FAISS index statistics (vectors, sections, health check)",
         "search":           "Interactive search over the FAISS index",
     },
     "Golden Set Generation": {
-        "generate-adversarial-queries":  "Generate the 1,000-query adversarial golden test set",
+        "generate-adversarial-queries":  "Generate the 1,080-query adversarial golden test set",
         "generate-benign-queries":       "Generate the 1,000-query benign golden test set",
         "generate-compound-queries":     "Generate the 600-query compound (mixed) golden test set",
     },
@@ -111,7 +111,7 @@ def data_show():
     records = load_all(text_dir, csv_dir)
 
     # Basic counts
-    matched = sum(1 for r in records if r.phi_entities)
+    matched = sum(1 for r in records if r.pii_entities)
     total_chars = sum(len(r.raw_text) for r in records)
     avg_chars = total_chars // len(records) if records else 0
 
@@ -139,13 +139,13 @@ def data_show():
         print(f"  Largest file:          {sizes[-1]:,} chars")
         print(f"  Median file:           {sizes[len(sizes) // 2]:,} chars")
 
-    # PHI coverage
+    # PII coverage
     if matched:
-        has_ssn = sum(1 for r in records if r.phi_entities.get("ssn"))
-        has_dob = sum(1 for r in records if r.phi_entities.get("dob"))
-        has_addr = sum(1 for r in records if r.phi_entities.get("address"))
+        has_ssn = sum(1 for r in records if r.pii_entities.get("ssn"))
+        has_dob = sum(1 for r in records if r.pii_entities.get("dob"))
+        has_addr = sum(1 for r in records if r.pii_entities.get("address"))
 
-        print(f"\n{'PHI COVERAGE':-^60}")
+        print(f"\n{'PII COVERAGE':-^60}")
         print(f"  With SSN:              {has_ssn}")
         print(f"  With DOB:              {has_dob}")
         print(f"  With Address:          {has_addr}")
@@ -309,9 +309,9 @@ def evaluate():
         sys.exit(1)
 
     # Resolve ground truth
-    groundtruth_path = data_dir / "processed" / "phi_groundtruth.json"
+    groundtruth_path = data_dir / "processed" / "pii_groundtruth.json"
     if not groundtruth_path.exists():
-        print(f"Error: PHI ground truth not found: {groundtruth_path}")
+        print(f"Error: PII ground truth not found: {groundtruth_path}")
         print("Run 'uv run ingestion' first.")
         sys.exit(1)
 
@@ -441,8 +441,9 @@ def leaderboard():
     - remote: calls the deployed /test endpoint on Cloud Run
 
     Examples:
-        uv run leaderboard --mode local --profiles naive hardened_fw_l2_base
-        uv run leaderboard --mode remote --remote-url https://mobile-rag-firewall-938910481811.us-west2.run.app
+        uv run leaderboard --mode local --profiles naive hardened_fw_l2_bert
+        uv run leaderboard --mode local --profiles fw_l1_hardened fw_l1_hardened_fw_l2_bert --limit 50
+        uv run leaderboard --mode remote --profiles hardened_fw_l2_bert fw_l1_hardened_fw_l2_bert
     """
     import argparse
     import asyncio
@@ -450,7 +451,7 @@ def leaderboard():
     from app.config import WANDB_PROJECT
     from app.evaluation.leaderboard import run_and_publish
 
-    CLOUD_RUN_URL = "https://mobile-rag-firewall-938910481811.us-west2.run.app"
+    CLOUD_RUN_URL = "https://mobile-rag-firewall-956461831254.us-west2.run.app"
 
     parser = argparse.ArgumentParser(description="Run leaderboard evaluation")
     parser.add_argument("--mode", choices=["local", "remote"], default="local",
@@ -459,7 +460,13 @@ def leaderboard():
                         help=f"Base URL for remote mode (default: {CLOUD_RUN_URL})")
     parser.add_argument("--profiles", nargs="+",
                         default=["naive", "naive_fw_l2_bert", "hardened", "hardened_fw_l2_bert"],
-                        help="Profiles to compare (default: naive naive_fw_l2_bert hardened hardened_fw_l2_bert)")
+                        help="Profiles to compare. Options: "
+                             "naive, hardened, naive_fw_l2_base, naive_fw_l2_bert, "
+                             "hardened_fw_l2_base, hardened_fw_l2_bert, "
+                             "fw_l1_naive, fw_l1_hardened, "
+                             "fw_l1_naive_fw_l2_base, fw_l1_naive_fw_l2_bert, "
+                             "fw_l1_hardened_fw_l2_base, fw_l1_hardened_fw_l2_bert "
+                             "(default: naive naive_fw_l2_bert hardened hardened_fw_l2_bert)")
     parser.add_argument("--limit", type=int, default=None,
                         help="Max queries per profile (default: all)")
     parser.add_argument("--queries", default=None,
@@ -467,18 +474,21 @@ def leaderboard():
     parser.add_argument("--benign-queries", default=None,
                         help="Path to benign queries JSON file (enables combined evaluation "
                              "with classification metrics). Default: data/golden_sets/benign_queries.json")
+    parser.add_argument("--compound-queries", default=None,
+                        help="Path to compound queries JSON file. Default: data/golden_sets/compound_queries.json")
     parser.add_argument("--adversarial-only", action="store_true",
-                        help="Run adversarial queries only (skip benign, no classification metrics)")
+                        help="Run adversarial queries only (skip benign and compound)")
     args = parser.parse_args()
 
     data_dir, _, _, index_dir = _resolve_paths()
 
     queries_path = Path(args.queries) if args.queries else data_dir / "golden_sets" / "adversarial_queries.json"
-    groundtruth_path = data_dir / "processed" / "phi_groundtruth.json"
+    groundtruth_path = data_dir / "processed" / "pii_groundtruth.json"
 
     # Resolve benign queries path
     if args.adversarial_only:
         benign_path = None
+        compound_path = None
     elif args.benign_queries:
         benign_path = Path(args.benign_queries)
     else:
@@ -486,20 +496,38 @@ def leaderboard():
         default_benign = data_dir / "golden_sets" / "benign_queries.json"
         benign_path = default_benign if default_benign.exists() else None
 
+    # Resolve compound queries path
+    if not args.adversarial_only:
+        if args.compound_queries:
+            compound_path = Path(args.compound_queries)
+        else:
+            default_compound = data_dir / "golden_sets" / "compound_queries.json"
+            compound_path = default_compound if default_compound.exists() else None
+    else:
+        compound_path = None
+
     if not queries_path.exists():
         print(f"Error: Query file not found: {queries_path}")
         sys.exit(1)
     if not groundtruth_path.exists():
-        print(f"Error: PHI ground truth not found. Run 'uv run ingestion' first.")
+        print(f"Error: PII ground truth not found. Run 'uv run ingestion' first.")
         sys.exit(1)
     if benign_path and not benign_path.exists():
         print(f"Error: Benign query file not found: {benign_path}")
+        sys.exit(1)
+    if compound_path and not compound_path.exists():
+        print(f"Error: Compound query file not found: {compound_path}")
         sys.exit(1)
 
     if args.mode == "local":
         if not (index_dir / "faiss.index").exists():
             print(f"Error: No FAISS index found. Run 'uv run ingestion' first.")
             sys.exit(1)
+
+    # Cap Weave's worker concurrency to match the server-side semaphore (3 per profile).
+    # Weave's default of 20 causes timeout storms on remote endpoints with 15-20s latency.
+    import os
+    os.environ["WEAVE_PARALLELISM"] = "3"
 
     weave.init(WANDB_PROJECT)
     print(f"[leaderboard] W&B project: {WANDB_PROJECT}")
@@ -515,6 +543,7 @@ def leaderboard():
         mode=args.mode,
         remote_url=args.remote_url,
         benign_path=str(benign_path) if benign_path else None,
+        compound_path=str(compound_path) if compound_path else None,
     ))
 
 

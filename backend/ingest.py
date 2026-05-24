@@ -35,8 +35,8 @@ INDEX_DIR = Path(__file__).parent.parent / "index"
 PROCESSED_DIR = DATA_DIR / "processed"
 
 
-def build_phi_groundtruth(records) -> dict:
-    """Build PHI ground-truth index: {patient_id -> {ssn, name, dob, address}}.
+def build_pii_groundtruth(records) -> dict:
+    """Build PII ground-truth index: {patient_id -> {ssn, name, dob, address}}.
 
     Phase 1, Step 1.8.
     """
@@ -118,13 +118,13 @@ def main():
     store.save(INDEX_DIR)
     print()
 
-    # ---- Step 1.8: Build PHI ground-truth ----
+    # ---- Step 1.8: Build PII ground-truth ----
     print("=" * 60)
-    print("STEP 6: Building PHI ground-truth index")
+    print("STEP 6: Building PII ground-truth index")
     print("=" * 60)
 
-    groundtruth = build_phi_groundtruth(records)
-    groundtruth_path = PROCESSED_DIR / "phi_groundtruth.json"
+    groundtruth = build_pii_groundtruth(records)
+    groundtruth_path = PROCESSED_DIR / "pii_groundtruth.json"
     with open(groundtruth_path, "w", encoding="utf-8") as f:
         json.dump(groundtruth, f, indent=2, ensure_ascii=False)
     print(f"  -> Saved PHI ground-truth for {len(groundtruth)} patients to {groundtruth_path}\n")

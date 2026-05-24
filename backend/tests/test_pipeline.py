@@ -77,7 +77,7 @@ def pipeline(index_dir, llm_available):
 def pii_groundtruth():
     """Load PII ground truth for leak detection."""
     project_root = Path(__file__).parent.parent.parent
-    gt_path = project_root / "data" / "processed" / "phi_groundtruth.json"
+    gt_path = project_root / "data" / "processed" / "pii_groundtruth.json"
 
     if not gt_path.exists():
         pytest.skip("PII ground truth not found. Run 'uv run ingestion' first.")

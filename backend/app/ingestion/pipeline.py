@@ -214,7 +214,7 @@ def run_full_ingestion(
     # Step 1.8: Build PII ground-truth index
     if processed_dir:
         processed_dir = Path(processed_dir)
-        phi_output = processed_dir / "phi_groundtruth.json"
+        phi_output = processed_dir / "pii_groundtruth.json"
         if verbose:
             print(f"[pipeline] Building PII ground truth -> {phi_output}")
         build_pii_groundtruth(csv_dir / "patients.csv", phi_output)

@@ -464,8 +464,25 @@ class BERTNERClassifier:
         value = text[start:end]
         return value, start, end
 
+    # Minimum confidence score for BERT NER detections
+    NER_CONFIDENCE_THRESHOLD = 0.85
+
+    # Prefixes that indicate a provider/doctor name (should not be redacted)
+    _PROVIDER_PREFIXES = re.compile(
+        r"(?:Dr\.?|Doctor|Provider|Physician|Nurse|NP|PA|RN)\s+$",
+        re.IGNORECASE,
+    )
+
     def classify(self, text: str) -> list[Detection]:
         """Detect names and addresses using fine-tuned BERT.
+
+        Also applies Synthea name regex as a safety net for names the
+        BERT model misses (e.g., "Raymond398 Hayes766").
+
+        Filters:
+        - Entities below confidence threshold are skipped
+        - Names preceded by "Dr." or similar provider titles are skipped
+          (doctor names are not patient PII)
 
         Args:
             text: The text to scan.
@@ -479,12 +496,23 @@ class BERTNERClassifier:
         for r in results:
             entity_group = r["entity_group"]
             if entity_group in ("NAME", "ADDRESS"):
+                # Skip low-confidence detections
+                if r["score"] < self.NER_CONFIDENCE_THRESHOLD:
+                    continue
+
                 # Trim punctuation from boundaries
                 value, start, end = self._trim_entity(text, r["start"], r["end"])
 
-                # Skip empty entities after trimming
-                if not value.strip():
+                # Skip entities that are too short to be meaningful PII
+                # (e.g., "LC" from "PLLC" is not a real address)
+                if len(value.strip()) < 4:
                     continue
+
+                # Skip provider/doctor names (not patient PII)
+                if entity_group == "NAME":
+                    prefix = text[max(0, start - 15):start]
+                    if self._PROVIDER_PREFIXES.search(prefix):
+                        continue
 
                 detections.append(Detection(
                     entity_type=entity_group,
@@ -493,22 +521,29 @@ class BERTNERClassifier:
                     end=end,
                     source="ner_bert",
                 ))
-        
+
         # Safety net: catch Synthea-format names the BERT model missed
         for match in SYNTHEA_FULL_NAME.finditer(text):
             already_detected = any(
                 d.start <= match.start() and d.end >= match.end()
                 for d in detections
             )
-            if not already_detected:
-                detections.append(Detection(
-                    entity_type="NAME",
-                    value=match.group(),
-                    start=match.start(),
-                    end=match.end(),
-                    source="ner_synthea",
-                ))
-                
+            if already_detected:
+                continue
+
+            # Skip provider/doctor names
+            prefix = text[max(0, match.start() - 15):match.start()]
+            if self._PROVIDER_PREFIXES.search(prefix):
+                continue
+
+            detections.append(Detection(
+                entity_type="NAME",
+                value=match.group(),
+                start=match.start(),
+                end=match.end(),
+                source="ner_synthea",
+            ))
+
         return detections
 
 

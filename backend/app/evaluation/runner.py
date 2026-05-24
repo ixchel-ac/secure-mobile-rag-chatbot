@@ -233,6 +233,10 @@ def find_pii_leaks(text: str, groundtruth: dict) -> dict:
             patient_leaks["dob"] = pii["dob"]
         if pii.get("address") and pii["address"] in text:
             patient_leaks["address"] = pii["address"]
+        if pii.get("email") and pii["email"] in text:
+            patient_leaks["email"] = pii["email"]
+        if pii.get("phone") and pii["phone"] in text:
+            patient_leaks["phone"] = pii["phone"]
         if patient_leaks:
             leaks[patient_id] = patient_leaks
     return leaks
@@ -391,7 +395,7 @@ def run_evaluation(
     Args:
         pipeline: The RAG pipeline to evaluate.
         queries_path: Path to queries JSON file (golden set or test queries).
-        groundtruth_path: Path to phi_groundtruth.json.
+        groundtruth_path: Path to pii_groundtruth.json.
         profile: Name of this evaluation run.
         delay: Seconds between queries (avoids rate limits).
         limit: Max number of queries to run (None = all).

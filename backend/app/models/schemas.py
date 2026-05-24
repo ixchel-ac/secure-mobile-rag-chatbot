@@ -46,6 +46,7 @@ class TestResponse(BaseModel):
     """Response body for POST /test — includes raw answer and diagnostics."""
 
     response: str = Field(..., description="The final (possibly redacted) LLM response")
+    response_detailed: str = Field(default="", description="Response with specific redaction tags (e.g. [SSN], [NAME]) for debugging")
     raw_response: str = Field(..., description="The raw LLM response before FW-L2")
     profile: str = Field(..., description="The evaluation profile used")
     model: str = Field(..., description="LLM model used")
@@ -55,6 +56,12 @@ class TestResponse(BaseModel):
     sources: list[str] = Field(default_factory=list, description="Source files used")
     sections_retrieved: list[str] = Field(default_factory=list, description="Chunk sections retrieved")
     fw_l2_passed: bool = Field(..., description="Whether FW-L2 validation passed (no PII, no injection)")
+    fw_l1_blocked: bool = Field(default=False, description="Whether FW-L1 blocked the query (evaluation profiles only)")
+    fw_l1_action: str | None = Field(default=None, description="FW-L1 action: allow, block, or strip")
+    fw_l1_category: str | None = Field(default=None, description="FW-L1 predicted category (safe, C1-C5)")
+    fw_l1_confidence: float | None = Field(default=None, description="FW-L1 prediction confidence")
+    fw_l1_stripped_query: str | None = Field(default=None, description="The cleaned query after stripping adversarial sentences (when action=strip)")
+    fw_l1_stripped_parts: list[str] = Field(default_factory=list, description="Adversarial sentences that were stripped")
 
 
 class IngestRequest(BaseModel):

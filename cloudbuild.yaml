@@ -1,14 +1,21 @@
 steps:
   - name: 'gcr.io/cloud-builders/docker'
+    entrypoint: 'bash'
     args:
-      - 'build'
-      - '-f'
-      - 'Dockerfile.fly'
-      - '-t'
-      - 'us-west2-docker.pkg.dev/mobile-rag-fw/mobile-rag-fw/backend:latest'
-      - '.'
+      - '-c'
+      - |
+        docker build \
+          -f Dockerfile.fly \
+          --build-arg WANDB_API_KEY=$$WANDB_API_KEY \
+          -t us-west2-docker.pkg.dev/mobile-rag-fw/mobile-rag-fw/backend:latest \
+          .
+    secretEnv: ['WANDB_API_KEY']
 images:
   - 'us-west2-docker.pkg.dev/mobile-rag-fw/mobile-rag-fw/backend:latest'
 timeout: 1800s
 options:
   machineType: 'E2_HIGHCPU_8'
+availableSecrets:
+  secretManager:
+    - versionName: projects/mobile-rag-fw/secrets/wandb-api-key/versions/latest
+      env: 'WANDB_API_KEY'

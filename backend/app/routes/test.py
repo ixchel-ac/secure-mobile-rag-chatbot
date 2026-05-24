@@ -16,6 +16,10 @@ VALID_PROFILES = {
     "naive", "naive_fw_l2_base", "naive_fw_l2_bert",
     "hardened", "hardened_fw_l2_base", "hardened_fw_l2_bert",
     "baseline", "fw_l2_base", "fw_l2_bert",
+    # FW-L1 profiles (evaluation only)
+    "fw_l1_hardened", "fw_l1_naive",
+    "fw_l1_hardened_fw_l2_base", "fw_l1_hardened_fw_l2_bert",
+    "fw_l1_naive_fw_l2_base", "fw_l1_naive_fw_l2_bert",
 }
 
 router = APIRouter()
@@ -51,9 +55,8 @@ async def handle_test(body: TestRequest, request: Request):
 
     system_prompt = SYSTEM_PROMPTS.get(config["prompt"], SYSTEM_PROMPT_HARDENED)
     ner_backend = config.get("ner_backend")
-    fw_l2 = FWL2(ner_backend=ner_backend) if config["fw_l2"] else None
 
-    # Build a pipeline with the requested profile
+    # Resolve pipeline from cache (lazy build on first use per profile)
     index_dir = Path(INDEX_DIR)
     if not (index_dir / "faiss.index").exists():
         raise HTTPException(
@@ -61,26 +64,89 @@ async def handle_test(body: TestRequest, request: Request):
             detail="FAISS index not built yet. Call POST /ingest first.",
         )
 
-    try:
-        pipeline = RAGPipeline(index_dir=index_dir, fw_l2=fw_l2, system_prompt=system_prompt)
-    except Exception as e:
-        raise HTTPException(status_code=503, detail=f"Could not load pipeline: {e}")
+    cache = request.app.state.test_pipelines
+    lock = request.app.state.test_pipelines_lock
+
+    if body.profile not in cache:
+        with lock:
+            # Double-checked locking: another thread may have built it while we waited
+            if body.profile not in cache:
+                try:
+                    print(f"[test] Building pipeline for profile '{body.profile}' (first use)")
+                    fw_l2 = FWL2(ner_backend=ner_backend) if config.get("fw_l2") else None
+                    fw_l1_instance = None
+                    if config.get("fw_l1"):
+                        from app.firewall.fw_l1 import FWL1
+                        fw_l1_instance = FWL1()
+                    built = RAGPipeline(
+                        index_dir=index_dir,
+                        fw_l2=fw_l2,
+                        system_prompt=system_prompt,
+                    )
+                    cache[body.profile] = {
+                        "pipeline": built,
+                        "fw_l1": fw_l1_instance,
+                        # Limit concurrent requests per profile — prevents reranker
+                        # and NER model from being called by too many threads at once
+                        "semaphore": __import__("asyncio").Semaphore(3),
+                    }
+                    print(f"[test] Pipeline cached for profile '{body.profile}'")
+                except Exception as e:
+                    raise HTTPException(status_code=503, detail=f"Could not load pipeline: {e}")
+
+    cached = cache[body.profile]
+    pipeline = cached["pipeline"]
+    fw_l1_instance = cached["fw_l1"]
+    semaphore = cached["semaphore"]
+
+    # FW-L1: classify and optionally strip adversarial sentences
+    fw_l1_result = None
+    query_for_pipeline = body.query  # may be replaced by stripped version
+
+    if fw_l1_instance is not None:
+        try:
+            fw_l1_result = fw_l1_instance.classify_and_strip(body.query)
+
+            if fw_l1_result.is_blocked:
+                return TestResponse(
+                    response="I can only answer clinical questions about patient health records.",
+                    raw_response="",
+                    profile=body.profile,
+                    model="fw_l1_blocked",
+                    redacted_entities=[],
+                    was_redacted=False,
+                    injection_detected=False,
+                    sources=[],
+                    sections_retrieved=[],
+                    fw_l2_passed=True,
+                    fw_l1_blocked=True,
+                    fw_l1_action="block",
+                    fw_l1_category=fw_l1_result.classification,
+                    fw_l1_confidence=fw_l1_result.confidence,
+                )
+
+            # If stripped, use the cleaned query for the pipeline
+            if fw_l1_result.is_stripped:
+                query_for_pipeline = fw_l1_result.stripped_query
+
+        except Exception as e:
+            raise HTTPException(
+                status_code=503,
+                detail=f"FW-L1 classify failed: {e}",
+            )
 
     try:
-        result = await pipeline.query_async(
-            query=body.query,
-            top_k=body.top_k,
-            sections=body.sections,
-            temperature=body.temperature,
-        )
+        async with semaphore:
+            result = await pipeline.query_async(
+                query=query_for_pipeline,
+                top_k=body.top_k,
+                sections=body.sections,
+                temperature=body.temperature,
+            )
     except (httpx.ConnectError, httpx.RemoteProtocolError) as e:
         raise HTTPException(status_code=502, detail=f"LLM provider unreachable: {e}")
     except httpx.TimeoutException:
         raise HTTPException(status_code=504, detail="LLM request timed out")
-    except httpx.HTTPStatusError as e:
-        raise HTTPException(status_code=502, detail=f"LLM provider returned {e.response.status_code}: {e.response.text[:200]}")
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"LLM error ({type(e).__name__}): {e}")
 
     redacted_entities = []
     if result.fw_l2_result and result.fw_l2_result.detections:
@@ -89,8 +155,15 @@ async def handle_test(body: TestRequest, request: Request):
     sources = list({c.metadata.get("source_file", "") for c in result.chunks})
     sections_retrieved = [c.metadata.get("section", "") for c in result.chunks]
 
+    # response = generic [REDACTED] tags (user-facing)
+    # response_detailed = specific [SSN], [NAME] tags (debugging)
+    response_detailed = ""
+    if result.fw_l2_result:
+        response_detailed = result.fw_l2_result.sanitized_text
+
     return TestResponse(
         response=result.answer,
+        response_detailed=response_detailed,
         raw_response=result.raw_answer,
         profile=body.profile,
         model=result.model,
@@ -100,4 +173,10 @@ async def handle_test(body: TestRequest, request: Request):
         sources=sources,
         sections_retrieved=sections_retrieved,
         fw_l2_passed=not result.was_redacted and not result.injection_detected,
+        fw_l1_blocked=False,
+        fw_l1_action=fw_l1_result.action if fw_l1_result else None,
+        fw_l1_category=fw_l1_result.classification if fw_l1_result else None,
+        fw_l1_confidence=fw_l1_result.confidence if fw_l1_result else None,
+        fw_l1_stripped_query=fw_l1_result.stripped_query if fw_l1_result else None,
+        fw_l1_stripped_parts=fw_l1_result.stripped_parts if fw_l1_result else [],
     )

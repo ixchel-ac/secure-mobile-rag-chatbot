@@ -1,5 +1,5 @@
-# Fly.io deployment — CPU-only, no NVIDIA packages
-FROM --platform=linux/amd64 python:3.11-slim
+# Fly.io / Cloud Run deployment — CPU-only, no NVIDIA packages
+FROM python:3.11-slim
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
@@ -36,9 +36,25 @@ RUN uv sync --frozen --no-dev --no-install-project \
     && uv pip install torch --index-url https://download.pytorch.org/whl/cpu \
     && rm -rf /root/.cache/pip /root/.cache/uv
 
-# Pre-download embedding model
+# Pre-download embedding model + reranker + spaCy NER model
+# CACHE_BUST: increment to force re-download of models
+ARG CACHE_BUST=1
 ARG EMBEDDING_MODEL=all-MiniLM-L6-v2
-RUN uv run python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('${EMBEDDING_MODEL}')"
+RUN uv run python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('${EMBEDDING_MODEL}')" \
+    && uv run python -c "from sentence_transformers import CrossEncoder; CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')" \
+    && uv run python -m spacy download en_core_web_sm
+
+# Download FW-L1 ONNX model from W&B at build time
+ARG WANDB_API_KEY
+RUN mkdir -p /app/fw_l1/models && \
+    uv run python -c "\
+import wandb, os; \
+os.environ['WANDB_API_KEY'] = '${WANDB_API_KEY}'; \
+run = wandb.init(project='mobile-rag-firewall', job_type='pull-model'); \
+artifact = run.use_artifact('fw-l1-model:latest'); \
+artifact.download(root='/app/fw_l1/models'); \
+run.finish(); \
+print('[docker] FW-L1 model downloaded')"
 
 # Copy application code
 COPY backend/app/ ./app/
@@ -50,9 +66,10 @@ COPY index/ ./index/
 COPY data/processed/ ./data/processed/
 COPY data/golden_sets/ ./data/golden_sets/
 
-EXPOSE 8000
+EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"
 
-CMD ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# PORT is injected by Cloud Run (default 8080); falls back to 8080 locally.
+CMD ["sh", "-c", "uv run uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}"]

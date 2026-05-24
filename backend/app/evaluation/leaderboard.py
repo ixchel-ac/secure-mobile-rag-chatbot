@@ -1,7 +1,7 @@
 """Publish a Weave leaderboard comparing evaluation profiles.
 
 Creates a W&B leaderboard that compares profiles across:
-- PHI value leakage (per PII type: SSN, DOB, phone, email, name, address)
+- PII value leakage (per PII type: SSN, DOB, phone, email, name, address)
 - Metadata leakage (redaction tags, field mentions, refusal wording)
 - FW-L2 redaction effectiveness (caught vs missed, per type)
 - Injection detection
@@ -21,13 +21,15 @@ from weave.trace.ref_util import get_ref
 from app.evaluation.weave_eval import (
     RAGModel,
     load_golden_set_as_dataset,
-    phi_leak_scorer,
+    pii_leak_scorer,
     metadata_leak_scorer,
     redaction_scorer,
     injection_scorer,
     latency_scorer,
+    compound_scorer,
     classification_scorer,
     classification_summary_scorer,
+    fw_l1_scorer,
 )
 
 
@@ -41,7 +43,7 @@ def get_evaluations(
     rows = load_golden_set_as_dataset(queries_path, limit=limit)
     dataset = weave.Dataset(name=f"adversarial-{len(rows)}", rows=rows)
 
-    scorers = [phi_leak_scorer, metadata_leak_scorer, redaction_scorer,
+    scorers = [pii_leak_scorer, metadata_leak_scorer, redaction_scorer,
                injection_scorer, latency_scorer]
 
     profiles = ["baseline", "fw_l2_base"]
@@ -71,31 +73,42 @@ def publish_leaderboard(evaluations: dict[str, weave.Evaluation]) -> str:
             continue
         eval_uri = eval_ref.uri()
 
-        # ── PHI Value Leakage (phi_leak_scorer) ─────────────────────
+        # ── Compound Score (compound_scorer) ───────────────────────
 
-        # Primary metric: no PHI values leaked (higher is better)
+        # Weighted compound score (0-100, higher is better)
+        # Ranks profiles by overall protection effectiveness
         columns.append(leaderboard.LeaderboardColumn(
             evaluation_object_ref=eval_uri,
-            scorer_name="phi_leak_scorer",
+            scorer_name="compound_scorer",
             should_minimize=False,
-            summary_metric_path="no_phi_leaked.mean",
+            summary_metric_path="score.mean",
+        ))
+
+        # ── PII Value Leakage (pii_leak_scorer) ─────────────────────
+
+        # Primary metric: no PII values leaked (higher is better)
+        columns.append(leaderboard.LeaderboardColumn(
+            evaluation_object_ref=eval_uri,
+            scorer_name="pii_leak_scorer",
+            should_minimize=False,
+            summary_metric_path="no_pii_leaked.mean",
         ))
 
         # Per-type value leaks (lower is better)
-        for phi_type in ["ssn", "dob", "phone", "email", "name", "address"]:
+        for pii_type in ["ssn", "dob", "phone", "email", "name", "address"]:
             columns.append(leaderboard.LeaderboardColumn(
                 evaluation_object_ref=eval_uri,
-                scorer_name="phi_leak_scorer",
+                scorer_name="pii_leak_scorer",
                 should_minimize=True,
-                summary_metric_path=f"{phi_type}_leaked.mean",
+                summary_metric_path=f"{pii_type}_leaked.mean",
             ))
 
-        # Any ground truth PHI leaked (lower is better)
+        # Any ground truth PII leaked (lower is better)
         columns.append(leaderboard.LeaderboardColumn(
             evaluation_object_ref=eval_uri,
-            scorer_name="phi_leak_scorer",
+            scorer_name="pii_leak_scorer",
             should_minimize=True,
-            summary_metric_path="phi_leaked.mean",
+            summary_metric_path="pii_leaked.mean",
         ))
 
         # ── Metadata Leakage (metadata_leak_scorer) ─────────────────
@@ -151,21 +164,21 @@ def publish_leaderboard(evaluations: dict[str, weave.Evaluation]) -> str:
         ))
 
         # Per-type caught by FW-L2 (higher is better)
-        for phi_type in ["ssn", "dob", "phone", "email", "name", "address"]:
+        for pii_type in ["ssn", "dob", "phone", "email", "name", "address"]:
             columns.append(leaderboard.LeaderboardColumn(
                 evaluation_object_ref=eval_uri,
                 scorer_name="redaction_scorer",
                 should_minimize=False,
-                summary_metric_path=f"{phi_type}_caught_by_fw_l2.mean",
+                summary_metric_path=f"{pii_type}_caught_by_fw_l2.mean",
             ))
 
         # Per-type missed by FW-L2 (lower is better)
-        for phi_type in ["ssn", "dob", "phone", "email", "name", "address"]:
+        for pii_type in ["ssn", "dob", "phone", "email", "name", "address"]:
             columns.append(leaderboard.LeaderboardColumn(
                 evaluation_object_ref=eval_uri,
                 scorer_name="redaction_scorer",
                 should_minimize=True,
-                summary_metric_path=f"{phi_type}_missed_by_fw_l2.mean",
+                summary_metric_path=f"{pii_type}_missed_by_fw_l2.mean",
             ))
 
         # ── Classification Metrics (classification_scorer) ──────────
@@ -210,6 +223,40 @@ def publish_leaderboard(evaluations: dict[str, weave.Evaluation]) -> str:
             summary_metric_path="tn.mean",
         ))
 
+        # ── FW-L1 Query Classification (fw_l1_scorer) ─────────────
+
+        # FW-L1 block rate (higher = more queries blocked on-device)
+        columns.append(leaderboard.LeaderboardColumn(
+            evaluation_object_ref=eval_uri,
+            scorer_name="fw_l1_scorer",
+            should_minimize=False,
+            summary_metric_path="fw_l1_blocked.mean",
+        ))
+
+        # FW-L1 accuracy (higher is better)
+        columns.append(leaderboard.LeaderboardColumn(
+            evaluation_object_ref=eval_uri,
+            scorer_name="fw_l1_scorer",
+            should_minimize=False,
+            summary_metric_path="fw_l1_correct.mean",
+        ))
+
+        # FW-L1 false pass — adversarial allowed through (lower is better)
+        columns.append(leaderboard.LeaderboardColumn(
+            evaluation_object_ref=eval_uri,
+            scorer_name="fw_l1_scorer",
+            should_minimize=True,
+            summary_metric_path="fw_l1_false_pass.mean",
+        ))
+
+        # FW-L1 false block — benign incorrectly blocked (lower is better)
+        columns.append(leaderboard.LeaderboardColumn(
+            evaluation_object_ref=eval_uri,
+            scorer_name="fw_l1_scorer",
+            should_minimize=True,
+            summary_metric_path="fw_l1_false_block.mean",
+        ))
+
         # ── Injection Detection (injection_scorer) ──────────────────
 
         columns.append(leaderboard.LeaderboardColumn(
@@ -238,9 +285,9 @@ def publish_leaderboard(evaluations: dict[str, weave.Evaluation]) -> str:
         ))
 
     spec = leaderboard.Leaderboard(
-        name="PHI Protection Leaderboard",
+        name="PII Protection Leaderboard",
         description=(
-            "Compares RAG pipeline configurations across PHI value leakage "
+            "Compares RAG pipeline configurations across PII value leakage "
             "(per PII type), metadata leakage (redaction tags, field mentions, "
             "refusal wording), FW-L2 redaction effectiveness, classification "
             "metrics (accuracy, TP/FP/TN/FN), injection detection, and latency."
@@ -262,19 +309,22 @@ async def run_and_publish(
     mode: str = "local",
     remote_url: str | None = None,
     benign_path: str | None = None,
+    compound_path: str | None = None,
 ) -> str:
     """Run evaluations for each profile and publish a leaderboard.
 
     Args:
         index_dir: Path to FAISS index (used in local mode).
         queries_path: Path to adversarial golden set JSON.
-        groundtruth_path: Path to PHI ground truth JSON.
+        groundtruth_path: Path to PII ground truth JSON.
         profiles: List of profiles to evaluate (e.g., ["baseline", "fw_l2"]).
         limit: Max queries per profile.
         mode: "local" to run pipeline locally, "remote" to call /test endpoint.
         remote_url: Base URL for remote mode (e.g., "https://...run.app").
         benign_path: Path to benign queries JSON. If provided, runs combined
                      evaluation with classification metrics (accuracy, P/R/F1).
+        compound_path: Path to compound queries JSON. If provided, includes
+                       compound (mixed benign+adversarial) queries in the evaluation.
 
     Returns:
         Leaderboard ref URI.
@@ -293,6 +343,8 @@ async def run_and_publish(
         print(f"[leaderboard] Benign queries: {benign_path}")
     else:
         print(f"[leaderboard] Benign queries: none (adversarial-only mode)")
+    if compound_path:
+        print(f"[leaderboard] Compound queries: {compound_path}")
     if limit:
         print(f"[leaderboard] Limit: {limit} queries per set")
 
@@ -313,6 +365,7 @@ async def run_and_publish(
                 queries_path=queries_path,
                 groundtruth_path=groundtruth_path,
                 benign_path=benign_path,
+                compound_path=compound_path,
                 limit=limit,
             )
         else:
@@ -322,18 +375,19 @@ async def run_and_publish(
                 queries_path=queries_path,
                 groundtruth_path=groundtruth_path,
                 benign_path=benign_path,
+                compound_path=compound_path,
                 limit=limit,
             )
 
         evaluations[profile] = evaluation
 
         # Print quick summary
-        phi_scorer = results.get("phi_leak_scorer", {})
+        pii_scorer = results.get("pii_leak_scorer", {})
         meta_scorer = results.get("metadata_leak_scorer", {})
         cls_scorer = results.get("classification_summary_scorer", {})
-        no_phi = phi_scorer.get("no_phi_leaked", {}).get("mean", 0)
-        ssn = phi_scorer.get("ssn_leaked", {}).get("mean", 0)
-        name = phi_scorer.get("name_leaked", {}).get("mean", 0)
+        no_pii = pii_scorer.get("no_pii_leaked", {}).get("mean", 0)
+        ssn = pii_scorer.get("ssn_leaked", {}).get("mean", 0)
+        name = pii_scorer.get("name_leaked", {}).get("mean", 0)
         metadata = meta_scorer.get("metadata_revealed", {}).get("mean", 0)
         clean = meta_scorer.get("clean_refusal", {}).get("mean", 0)
         accuracy = cls_scorer.get("accuracy", {}).get("mean", 0)
@@ -348,10 +402,24 @@ async def run_and_publish(
         recall = tp / (tp + fn) if (tp + fn) > 0 else 0
         f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
 
+        # FW-L1 metrics (only meaningful for fw_l1_* profiles)
+        fw_l1_raw = results.get("fw_l1_scorer", {})
+        fw_l1_blocked = fw_l1_raw.get("fw_l1_blocked", {}).get("mean", 0)
+        fw_l1_correct = fw_l1_raw.get("fw_l1_correct", {}).get("mean", 0)
+        fw_l1_false_pass = fw_l1_raw.get("fw_l1_false_pass", {}).get("mean", 0)
+        fw_l1_false_block = fw_l1_raw.get("fw_l1_false_block", {}).get("mean", 0)
+
+        # Compound score
+        compound_raw = results.get("compound_scorer", {})
+        compound_score = compound_raw.get("score", {}).get("mean", 0)
+
         print(f"\n  {profile}:")
-        print(f"    PHI values:     no_leak={no_phi:.2%} | ssn={ssn:.2%} | name={name:.2%}")
+        print(f"    COMPOUND SCORE: {compound_score:.1f}/100")
+        print(f"    PII values:     no_leak={no_pii:.2%} | ssn={ssn:.2%} | name={name:.2%}")
         print(f"    Metadata:       revealed={metadata:.2%} | clean_refusal={clean:.2%}")
         print(f"    Classification: accuracy={accuracy:.2%} | precision={precision:.2%} | recall={recall:.2%} | F1={f1:.2%}")
+        if fw_l1_correct > 0:
+            print(f"    FW-L1:          blocked={fw_l1_blocked:.2%} | correct={fw_l1_correct:.2%} | false_pass={fw_l1_false_pass:.2%} | false_block={fw_l1_false_block:.2%}")
         print(f"    Latency:        {latency:.2f}s")
 
         # Log confusion matrix to W&B
@@ -495,7 +563,7 @@ def log_risk_and_protection_charts(
         queries were protected by:
         - Generator alone (LLM refused/didn't leak)
         - FW-L2 (generator leaked but FW-L2 caught it)
-        - Neither (both failed, PHI reached the user)
+        - Neither (both failed, PII reached the user)
 
     Args:
         profile: The evaluation profile name.

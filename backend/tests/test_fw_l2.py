@@ -32,7 +32,7 @@ class TestRegexScanner:
 
     def test_detects_ssn(self, fw):
         result = fw.validate("Patient SSN is 123-45-6789.")
-        assert result.has_phi
+        assert result.has_pii
         assert "SSN" in result.detection_summary
         assert "[SSN]" in result.sanitized_text
         assert "123-45-6789" not in result.sanitized_text
@@ -71,7 +71,7 @@ class TestRegexScanner:
 
     def test_clean_text_passes(self, fw):
         result = fw.validate("The patient is taking Aspirin 81mg daily for cardiovascular protection.")
-        assert not result.has_phi
+        assert not result.has_pii
         assert result.sanitized_text == result.original_text
 
     def test_ssn_logged_in_detections(self, fw):

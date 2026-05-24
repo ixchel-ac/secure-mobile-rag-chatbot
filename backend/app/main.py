@@ -14,8 +14,12 @@ from app.routes import health, query, ingest, test
 async def lifespan(app: FastAPI):
     """Load FAISS index, FW-L2, and RAG pipeline on startup."""
     import threading
+    from app.firewall.fw_l1 import FWL1
     from app.firewall.fw_l2 import FWL2
     from app.rag.pipeline import RAGPipeline
+
+    fw_l1 = FWL1()
+    app.state.fw_l1 = fw_l1
 
     fw_l2 = FWL2(ner_backend="bert")
     app.state.fw_l2 = fw_l2

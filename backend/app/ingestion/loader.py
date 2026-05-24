@@ -6,6 +6,7 @@ Phase 1, Step 1.2:
 - Cross-reference data/synthea/csv/patients.csv to attach SSN, DOB, address
 """
 import csv
+import hashlib
 import json
 import re
 from dataclasses import dataclass, field
@@ -36,11 +37,44 @@ class PatientRecord:
         return "\n".join(lines)
 
 
+def _generate_synthetic_contact(first: str, last: str, patient_id: str) -> dict:
+    """Generate deterministic synthetic email and phone from patient fields.
+
+    Uses MD5 hash of the patient UUID to produce reproducible values
+    across runs. Email strips Synthea digits from names.
+
+    Args:
+        first: Patient first name (e.g., "Adah626")
+        last: Patient last name (e.g., "Klein929")
+        patient_id: Patient UUID
+
+    Returns:
+        Dict with "email" and "phone" keys.
+    """
+    h = hashlib.md5(patient_id.encode()).hexdigest()
+
+    # Email: strip Synthea digits, lowercase
+    clean_first = re.sub(r"\d+", "", first).lower()
+    clean_last = re.sub(r"\d+", "", last).lower()
+    domains = ["gmail.com", "yahoo.com", "outlook.com", "hotmail.com", "aol.com"]
+    domain = domains[int(h[:2], 16) % len(domains)]
+    email = f"{clean_first}.{clean_last}@{domain}"
+
+    # Phone: deterministic from hash digits
+    digits = re.sub(r"[^0-9]", "", h)[:10]
+    phone = f"({digits[:3]}) {digits[3:6]}-{digits[6:10]}"
+
+    return {"email": email, "phone": phone}
+
+
 def load_patients_csv(csv_path: Path) -> dict[str, dict]:
     """Load patients.csv and return a lookup keyed by patient UUID -> row dict.
 
     The CSV columns used:
         Id, BIRTHDATE, SSN, FIRST, MIDDLE, LAST, ADDRESS, CITY, STATE, ZIP
+
+    Synthetic email and phone are generated per patient (Synthea does not
+    produce these fields).
     """
     lookup_by_id: dict[str, dict] = {}
 
@@ -52,6 +86,8 @@ def load_patients_csv(csv_path: Path) -> dict[str, dict]:
             middle = row.get("MIDDLE", "")
             last = row["LAST"]
 
+            contact = _generate_synthetic_contact(first, last, patient_id)
+
             patient_info = {
                 "patient_id": patient_id,
                 "ssn": row.get("SSN", ""),
@@ -59,6 +95,8 @@ def load_patients_csv(csv_path: Path) -> dict[str, dict]:
                 "name": f"{first} {last}",
                 "full_name": f"{first} {middle} {last}".strip(),
                 "address": f"{row.get('ADDRESS', '')}, {row.get('CITY', '')}, {row.get('STATE', '')} {row.get('ZIP', '')}",
+                "email": contact["email"],
+                "phone": contact["phone"],
                 "first": first,
                 "middle": middle,
                 "last": last,
@@ -158,6 +196,8 @@ def load_all(
                     "name": patient_info["name"],
                     "full_name": patient_info["full_name"],
                     "address": patient_info["address"],
+                    "email": patient_info["email"],
+                    "phone": patient_info["phone"],
                 },
             )
         else:
@@ -185,7 +225,7 @@ def build_pii_groundtruth(csv_path: str | Path, output_path: str | Path) -> dict
 
     Args:
         csv_path: Path to patients.csv
-        output_path: Path to write phi_groundtruth.json
+        output_path: Path to write pii_groundtruth.json
 
     Returns:
         The ground-truth dictionary.
@@ -204,6 +244,8 @@ def build_pii_groundtruth(csv_path: str | Path, output_path: str | Path) -> dict
             "name": info["name"],
             "full_name": info["full_name"],
             "address": info["address"],
+            "email": info["email"],
+            "phone": info["phone"],
         }
 
     # Save to disk

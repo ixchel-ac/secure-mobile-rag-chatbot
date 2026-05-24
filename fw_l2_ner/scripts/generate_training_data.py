@@ -25,7 +25,7 @@ load_dotenv(_project_root / ".env", override=True)
 
 SEED = 42
 PROJECT_ROOT = Path(__file__).parent.parent
-GROUNDTRUTH_PATH = PROJECT_ROOT / "data" / "processed" / "phi_groundtruth.json"
+GROUNDTRUTH_PATH = PROJECT_ROOT / "data" / "processed" / "pii_groundtruth.json"
 INDEX_METADATA_PATH = PROJECT_ROOT / "index" / "metadata.jsonl"
 OUTPUT_DIR = Path(__file__).parent / "data"
 
