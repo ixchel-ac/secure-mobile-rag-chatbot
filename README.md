@@ -51,48 +51,61 @@ uv --version
 
 ```
 mobile-rag-firewall/
-â”œâ”€â”€ README.md
-â”œâ”€â”€ docker-compose.yml          # Orchestrates backend + Ollama (optional)
-â”œâ”€â”€ .env                        # Environment variables (models, API keys, paths)
-â”‚
-â”œâ”€â”€ data/                       # Data directory (not committed)
-â”‚   â”œâ”€â”€ synthea/                # Raw Synthea patient data (text + CSV)
-â”‚   â”œâ”€â”€ processed/              # PII ground truth, chunks
-â”‚   â”œâ”€â”€ golden_sets/            # Adversarial query sets (1000 queries, C1-C5)
-â”‚   â””â”€â”€ evaluation_results/     # JSON reports from evaluation runs
-â”‚
-â”œâ”€â”€ backend/                    # Cloud zone -- FastAPI + RAG + FW-L2
-â”‚   â”œâ”€â”€ Dockerfile
-â”‚   â”œâ”€â”€ pyproject.toml          # Dependencies + CLI scripts (8 commands)
-â”‚   â”œâ”€â”€ tests/
-â”‚   â”‚   â”œâ”€â”€ test_loader.py      # 20 tests: data loading
-â”‚   â”‚   â”œâ”€â”€ test_retriever.py   # 35 tests: retrieval quality + adversarial
-â”‚   â”‚   â”œâ”€â”€ test_pipeline.py    # 22 tests: benign + adversarial LLM queries
-â”‚   â”‚   â””â”€â”€ test_fw_l2.py       # 29 tests: regex, NER, injection detection
-â”‚   â””â”€â”€ app/
-â”‚       â”œâ”€â”€ config.py           # Settings, env vars
-â”‚       â”œâ”€â”€ cli.py              # CLI entry points (uv run commands)
-â”‚       â”œâ”€â”€ ingestion/          # Loader, Cleaner, Chunker, Pipeline
-â”‚       â”œâ”€â”€ rag/                # Embedder, Retriever, Generator, RAG Pipeline
-â”‚       â”œâ”€â”€ firewall/           # FW-L2 (regex + spaCy NER + injection detection)
-â”‚       â”œâ”€â”€ evaluation/         # Runner, Weave eval, Leaderboard
-â”‚       â”œâ”€â”€ vectorstore/        # FAISS index management
-â”‚       â”œâ”€â”€ models/             # Pydantic schemas
-â”‚       â””â”€â”€ routes/             # API endpoints (stub)
-â”‚
-â”œâ”€â”€ experiments/                # ML experiments
-â”‚   â””â”€â”€ phi_ner/                # BERT fine-tuning for PII NER
-â”‚       â”œâ”€â”€ pyproject.toml      # Experiment dependencies + CLI (6 commands)
-â”‚       â”œâ”€â”€ notebooks/          # Google Colab training notebook
-â”‚       â”œâ”€â”€ scripts/            # Generate data, train, evaluate, export
-â”‚       â”œâ”€â”€ data/               # Generated train/val/test splits
-â”‚       â””â”€â”€ models/             # Trained model checkpoints
-â”‚
-â”œâ”€â”€ index/                      # FAISS index files (~41 MB)
-â”œâ”€â”€ fw_l1/                      # On-device FW-L1 (stub)
-â””â”€â”€ evaluation/                 # E2E evaluation scripts
-```
-
+├── README.md
+├── PROJECT_REPORT_2026_05_10.md    # Interim technical report
+├── docker-compose.yml              # Orchestrates backend + Ollama (optional)
+├── .env                            # Environment variables (models, API keys, paths)
+│
+├── data/                           # Data directory (not committed)
+│   ├── synthea/                    # Raw Synthea patient data (text + CSV)
+│   ├── processed/                  # PII ground truth, chunks
+│   ├── golden_sets/                # Adversarial + benign + compound query sets
+│   │   ├── adversarial_queries.json    # 1,080 queries (C1-C5)
+│   │   ├── benign_queries.json         # 1,000 clinical queries
+│   │   └── compound_queries.json       # 600 compound queries
+│   └── evaluation_results/         # JSON reports from evaluation runs
+│
+├── backend/                        # Cloud zone -- FastAPI + RAG + FW-L2
+│   ├── Dockerfile
+│   ├── pyproject.toml              # Dependencies + CLI scripts
+│   ├── tests/
+│   │   ├── test_loader.py          # 20 tests: data loading
+│   │   ├── test_retriever.py       # 35 tests: retrieval quality + adversarial
+│   │   ├── test_pipeline.py        # 22 tests: benign + adversarial LLM queries
+│   │   └── test_fw_l2.py          # 29 tests: regex, NER, injection detection
+│   └── app/
+│       ├── config.py               # Settings, env vars
+│       ├── cli.py                  # CLI entry points (uv run commands)
+│       ├── ingestion/              # Loader, Cleaner, Chunker, Pipeline
+│       ├── rag/                    # Embedder, Retriever, Generator, RAG Pipeline
+│       ├── firewall/               # FW-L1 (ONNX classifier) + FW-L2 (regex + NER)
+│       ├── evaluation/             # Runner, Weave eval, Leaderboard
+│       ├── vectorstore/            # FAISS index management
+│       ├── models/                 # Pydantic schemas
+│       └── routes/                 # API endpoints (health, query, test, ingest)
+│
+├── fw_l1/                          # FW-L1 query classifier (training + on-device)
+│   ├── scripts/                    # Training data generation, ONNX export, fusion
+│   │   ├── generate_training_data.py
+│   │   ├── export_onnx.py
+│   │   └── fuse_tokenizer.py       # Fuse tokenizer into ONNX for Android
+│   ├── notebooks/                  # Google Colab training notebooks
+│   │   ├── 01_training.ipynb       # v1: 3 models (MobileBERT, DistilBERT, TinyBERT)
+│   │   └── 02_fine_tuning_v2.ipynb # v2: compound-aware (focal loss, curriculum learning)
+│   ├── models/                     # ONNX model + tokenizer (from W&B artifact)
+│   └── ANDROID_DEPLOYMENT.md       # Step-by-step Android integration guide
+│
+├── experiments/                    # ML experiments
+│   └── phi_ner/                    # BERT fine-tuning for PII NER (FW-L2)
+│       ├── pyproject.toml
+│       ├── notebooks/              # 5 Colab notebooks (training, eval, ablation)
+│       ├── scripts/                # Generate data, train, evaluate, export
+│       └── models/                 # Trained model checkpoints
+│
+├── index/                          # FAISS index files (~41 MB)
+├── Dockerfile.fly                  # CPU-only Dockerfile for Cloud Run
+├── cloudbuild.yaml                 # Google Cloud Build config
+└── CHANGES_*.md                    # Detailed code change logs per date
 ---
 
 ## Environment Configuration
