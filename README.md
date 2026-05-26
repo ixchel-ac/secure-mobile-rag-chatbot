@@ -589,27 +589,36 @@ The original chunker allowed chunks up to 2,249 chars (overlap pushed past the 2
 
 ### Defense in depth
 
+---
+
+## Key Findings
+
+### System prompt alone is not sufficient
+
+With the **naive prompt**, the LLM freely outputs SSNs, names, and addresses. The **hardened prompt** blocks most adversarial queries, but system prompts are brittle -- jailbreaks evolve and different model versions may behave differently.
+
+### Defense in depth is essential
+
 ```
 Mobile App
-    â”‚
-    â”œâ”€â”€ FW-L1: Block adversarial queries (on-device)
-    â”‚
-    â–¼
+    |
+    +-- FW-L1: Block adversarial queries (on-device, ~20ms)
+    |
+    v
 Backend
-    â”‚
-    â”œâ”€â”€ Retriever: Embed query â†’ FAISS search â†’ top-k chunks
-    â”‚
-    â”œâ”€â”€ Generator: System prompt + context + query â†’ LLM
-    â”‚       â”œâ”€â”€ Naive prompt (no guardrails â€” for testing FW-L2)
-    â”‚       â””â”€â”€ Hardened prompt (refuses PII requests, no metadata leakage)
-    â”‚
-    â”œâ”€â”€ FW-L2: Scan and redact PII from response
-    â”‚       â”œâ”€â”€ Regex (SSN, phone, email, DOB, MRN)
-    â”‚       â”œâ”€â”€ NER (names, addresses â€” spaCy or fine-tuned BERT)
-    â”‚       â”œâ”€â”€ Injection detection
-    â”‚       â””â”€â”€ Metadata leak detection (evaluation only)
-    â”‚
-    â–¼
+    |
+    +-- Retriever: 3-stage (FAISS -> patient augmentation -> reranker)
+    |
+    +-- Generator: System prompt + context + query -> LLM
+    |       +-- Naive prompt (no guardrails -- for testing FW-L2)
+    |       +-- Hardened prompt (refuses PII requests, no metadata leakage)
+    |
+    +-- FW-L2: Scan and redact PII from response
+    |       +-- Regex (SSN, phone, email, DOB, MRN)
+    |       +-- NER (names, addresses -- spaCy or fine-tuned BERT)
+    |       +-- Injection detection
+    |
+    v
 Safe Response to Mobile App
 ```
 
