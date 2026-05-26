@@ -13,6 +13,8 @@ Usage:
 
 from __future__ import annotations
 
+import os
+
 import wandb
 import weave
 from weave.flow import leaderboard
@@ -519,6 +521,13 @@ def log_confusion_matrix(
         tags=["leaderboard", "confusion-matrix", profile],
         reinit=True,
     )
+
+    # Windows / Python 3.12+: wandb's module-level TemporaryDirectory can be
+    # cleaned up prematurely before the first run.log() call, causing a
+    # FileNotFoundError when it tries to write staging .table.json files.
+    # Recreate the directory if it was deleted.
+    from wandb.sdk.data_types._private import MEDIA_TMP  # noqa: PLC0415
+    os.makedirs(MEDIA_TMP.name, exist_ok=True)
 
     # Confusion matrix chart
     run.log({
