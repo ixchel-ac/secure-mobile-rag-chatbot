@@ -563,7 +563,7 @@ docker compose --profile ollama up -d    # Backend + Ollama + auto model pull
 | **4.11** | Academic evaluation notebooks (5 notebooks on Colab) | Done |
 | **5** | FastAPI Backend (wire routes to pipeline) | Done |
 | **6** | Evaluation + Observability (Weave integration) | Done |
-| **7** | FW-L1 Model Training and ONNX Export | In progress |
+| **7** | FW-L1 Model Training and ONNX Export | Done |
 | **8** | Android App + FW-L1 Integration | Done |
 | **9** | Full System Evaluation | Done |
 
